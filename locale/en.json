@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Vinyl Music Player",
+    "title": "dsh-music-player",
     "description": "A draggable glass vinyl player floating over the interface: the disc spins, a click expands it into a control bar, and the gear opens the playlist and search panel."
   }
 }
