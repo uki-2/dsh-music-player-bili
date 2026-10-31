@@ -1,4 +1,4 @@
-# dsh-music-player
+# dsh-music-player-bili
 
 悬浮在DSH界面上的音乐播放器。
 
@@ -27,15 +27,16 @@
 插件是一个标准的 DSH bundle。
 
 ```bash
-# 本地目录安装
-dsh plugin --profile <profile> add link:<本仓库的绝对路径>
+# 从 GitHub 装
+dsh plugin --profile <profile> add github:uki-2/dsh-music-player-bili
 
-# 或者把目录放进 profile 后，用插件管理器 / 设置页安装
+# 从本地目录装
+dsh plugin --profile <profile> add link:<本仓库的绝对路径>
 
 # 或者你许个愿让大肥鱼帮你装
 ```
 
-安装后在「设置 → 插件」里可以看到 **`dsh-music-player`**，启用即可出现在界面上。
+安装后在「设置 → 插件」里可以看到 **`dsh-music-player-bili`**，启用即可出现在界面上。
 
 ## 使用
 

@@ -7,7 +7,7 @@
  * transport buttons only drive local state.
  */
 window.__ModuleLoader__.load({
-  id: 'dsh-music-player',
+  id: 'dsh-music-player-bili',
   factory(require) {
     const React = require('react')
     const h = React.createElement
@@ -17,15 +17,15 @@ window.__ModuleLoader__.load({
     const MARGIN = 14 // min distance from the viewport edges
     const GAP = 10 // gap between the bar and the gear below it
     const GEAR = 44 // gear circle diameter
-    const POS_KEY = 'dsh-music-player:position:v1'
+    const POS_KEY = 'dsh-music-player-bili:position:v1'
     // Shown in the settings-panel footer so the running build is verifiable at a
     // glance (the page keeps serving a cached module until it is reloaded).
     const BUILD = 'v0.1.62'
     const API_BASE = '/dsh-music'
-    const LINK_KEY = 'dsh-music-player:link:v1'
-    const TRACKS_KEY = 'dsh-music-player:tracks:v1'
-    const VOLUME_KEY = 'dsh-music-player:volume:v1'
-    const MODE_KEY = 'dsh-music-player:mode:v1'
+    const LINK_KEY = 'dsh-music-player-bili:link:v1'
+    const TRACKS_KEY = 'dsh-music-player-bili:tracks:v1'
+    const VOLUME_KEY = 'dsh-music-player-bili:volume:v1'
+    const MODE_KEY = 'dsh-music-player-bili:mode:v1'
     const DEFAULT_LINK = 'https://www.bilibili.com/medialist/detail/ml4345449283'
     // Transport sizes mirror the CSS: the bar is sized around them, so the
     // controls stay close together instead of spreading over three thirds.
@@ -1599,7 +1599,7 @@ window.__ModuleLoader__.load({
           h('style', { key: 'style' }, CSS),
           h(
             'div',
-            { key: 'root', className: 'dshmp-root', 'data-dsh-music-player': '' },
+            { key: 'root', className: 'dshmp-root', 'data-dsh-music-player-bili': '' },
             h(
               'div',
               {

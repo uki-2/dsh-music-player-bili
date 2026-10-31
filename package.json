@@ -1,18 +1,27 @@
 {
-  "name": "dsh-music-player",
+  "name": "dsh-music-player-bili",
   "version": "0.1.62",
   "private": true,
   "license": "MIT",
   "author": "uki-2 <uki-2@users.noreply.github.com> (https://github.com/uki-2)",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/uki-2/dsh-music-player.git"
+    "url": "git+https://github.com/uki-2/dsh-music-player-bili.git"
   },
-  "homepage": "https://github.com/uki-2/dsh-music-player#readme",
+  "homepage": "https://github.com/uki-2/dsh-music-player-bili#readme",
   "bugs": {
-    "url": "https://github.com/uki-2/dsh-music-player/issues"
+    "url": "https://github.com/uki-2/dsh-music-player-bili/issues"
   },
-  "description": "Floating glass vinyl music player in the DSH Web UI with a Bilibili engine: read favorite-folder playlists, search, stream audio, drag and expand.",
+  "description": "A frosted-glass vinyl player floating over DSH (DeepSeek Harness): play public Bilibili playlists, search and play instantly, no login. 在 DSH 里挂一台黑胶唱机，贴 B 站公开歌单链接就能听。",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "bilibili",
+    "music-player",
+    "audio",
+    "vinyl"
+  ],
   "type": "module",
   "main": "index.js",
   "icon": "./icon.svg",

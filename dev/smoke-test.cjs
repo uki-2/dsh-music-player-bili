@@ -85,8 +85,13 @@ function createRuntime(width, height) {
   vm.runInContext(source, sandbox, { filename: 'client.js' })
 
   const definition = sandbox.__definition
-  if (!definition || definition.id !== 'dsh-music-player') {
-    failures.push('module did not register under id dsh-music-player')
+  // The client module id must match the package name (the loader keys on it), so
+  // read it from package.json instead of hard-coding it here.
+  const expectedId = JSON.parse(
+    require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'package.json'), 'utf8'),
+  ).name
+  if (!definition || definition.id !== expectedId) {
+    failures.push('module did not register under id ' + expectedId + ' (got ' + (definition && definition.id) + ')')
     return null
   }
 

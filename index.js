@@ -58,7 +58,7 @@ export function apply(ctx) {
     }
   }
 
-  const dir = join(homedir(), '.dsh', 'dsh-music-player')
+  const dir = join(homedir(), '.dsh', 'dsh-music-player-bili')
   const statePath = join(dir, 'state.json')
   let state = { cookies: {} }
   try {
