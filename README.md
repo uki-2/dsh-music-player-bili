@@ -27,6 +27,9 @@
 插件是一个标准的 DSH bundle。
 
 ```bash
+# 从 npm 装
+dsh plugin --profile <profile> add dsh-music-player-bili
+
 # 从 GitHub 装
 dsh plugin --profile <profile> add github:uki-2/dsh-music-player-bili
 

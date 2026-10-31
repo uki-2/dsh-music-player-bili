@@ -1,7 +1,10 @@
 {
   "name": "dsh-music-player-bili",
   "version": "0.1.62",
-  "private": true,
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "license": "MIT",
   "author": "uki-2 <uki-2@users.noreply.github.com> (https://github.com/uki-2)",
   "repository": {
