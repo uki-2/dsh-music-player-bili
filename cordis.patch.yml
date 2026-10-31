@@ -1,0 +1,6 @@
+# Floating vinyl music player for the DSH Web UI.
+# The Client half (client.js) registers into `shell.overlay`; the Host half is an
+# empty shell for the playback engine that will be added in a later step.
+- insert:
+    - id: music-player
+      name: dsh-music-player

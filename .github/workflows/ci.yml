@@ -1,0 +1,40 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Syntax check
+        run: |
+          node --check index.js
+          node --check client.js
+          node --check bili.js
+
+      - name: Validate JSON
+        run: |
+          node -e "for (const f of ['package.json','locale/en.json','locale/zh.json']) JSON.parse(require('fs').readFileSync(f,'utf8'))"
+
+      - name: Client smoke test
+        run: node dev/smoke-test.cjs
+
+      - name: Manifest sanity
+        run: |
+          node -e "
+            const pkg = require('./package.json');
+            if (!pkg.dsh?.bundle?.patch) throw new Error('missing dsh.bundle.patch');
+            if (!pkg.dsh?.client?.platform) throw new Error('missing dsh.client.platform');
+            if (!pkg.files.includes('client.js')) throw new Error('client.js not published');
+            console.log('manifest ok');
+          "

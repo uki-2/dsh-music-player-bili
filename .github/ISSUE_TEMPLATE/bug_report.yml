@@ -1,0 +1,61 @@
+name: Bug report
+description: 播放器不工作、界面错位、音源异常
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请先确认：面板底部显示的是当前版本号（形如 `b62`），并且刷新过页面。
+        音源问题请附上出问题的 B 站链接或 BV 号。
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 出问题的部分
+      options:
+        - 播放（无声 / 卡住 / 顺序错）
+        - 进度条拖动
+        - 音量
+        - 歌单载入 / 刷新
+        - 搜索
+        - 界面（拖动、展开、齿轮、样式）
+        - 安装 / 插件不出现
+    validations:
+      required: true
+
+  - type: input
+    id: build
+    attributes:
+      label: 构建号
+      description: 设置面板右下角显示的 b 开头编号
+      placeholder: b62
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 现象
+      description: 发生了什么、你期望是什么
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 载入歌单 ...
+        2. 点某首歌 ...
+        3. 拖动进度条到 70% ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: env
+    attributes:
+      label: 环境
+      description: 操作系统、DSH 版本、是否改过设置
+      placeholder: Windows 11 / DSH 0.2.1 / 默认设置
+    validations:
+      required: false

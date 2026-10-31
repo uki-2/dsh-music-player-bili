@@ -1,0 +1,8 @@
+# Normalize line endings: the repo stores LF, Windows checkouts keep LF too.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.wav binary
+*.mp3 binary
