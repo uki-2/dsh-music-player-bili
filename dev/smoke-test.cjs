@@ -858,7 +858,7 @@ function makeFetchStub() {
     const parsed = new URL(target, 'http://127.0.0.1')
     if (target.indexOf('/api/settings') !== -1) {
       if (method === 'POST') posts.push(JSON.parse(String((options && options.body) || '{}')))
-      return reply({ ok: true, version: '1.102.0', settings: {} })
+      return reply({ ok: true, version: '0.1.103', settings: {} })
     }
     if (target.indexOf('/api/playlist') !== -1) {
       const link = parsed.searchParams.get('link') || ''

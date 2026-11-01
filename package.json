@@ -1,6 +1,6 @@
 {
   "name": "dsh-music-player-bili",
-  "version": "1.102.0",
+  "version": "0.1.103",
   "private": false,
   "publishConfig": {
     "access": "public"

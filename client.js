@@ -26,7 +26,7 @@ const TOP_INSET = TITLE_BAR + TOP_GAP
     const POS_KEY = 'dsh-music-player-bili:position:v1'
     // Shown in the settings-panel footer so the running build is verifiable at a
     // glance (the page keeps serving a cached module until it is reloaded).
-    const BUILD = 'v1.102.0' // fallback only; the host reports package.json live
+    const BUILD = 'v0.1.103' // fallback only; the host reports package.json live
     const API_BASE = '/dsh-music'
     const LINK_KEY = 'dsh-music-player-bili:link:v1'
     const TRACKS_KEY = 'dsh-music-player-bili:tracks:v1'
