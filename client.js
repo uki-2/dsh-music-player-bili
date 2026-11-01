@@ -15,12 +15,18 @@ window.__ModuleLoader__.load({
 
     // ------------------------------------------------------------------ layout
     const MARGIN = 14 // min distance from the viewport edges
+// The widget never enters the app's title strip. The reserve is the title bar plus a
+// fixed gap the author asked for, so shrinking or zooming the window keeps the widget
+// inside this band instead of pushing it behind the chrome.
+const TITLE_BAR = 40
+const TOP_GAP = 76
+const TOP_INSET = TITLE_BAR + TOP_GAP
     const GAP = 10 // gap between the bar and the gear below it
     const GEAR = 44 // gear circle diameter
     const POS_KEY = 'dsh-music-player-bili:position:v1'
     // Shown in the settings-panel footer so the running build is verifiable at a
     // glance (the page keeps serving a cached module until it is reloaded).
-    const BUILD = 'v0.1.62'
+    const BUILD = 'v1.102.0' // fallback only; the host reports package.json live
     const API_BASE = '/dsh-music'
     const LINK_KEY = 'dsh-music-player-bili:link:v1'
     const TRACKS_KEY = 'dsh-music-player-bili:tracks:v1'
@@ -75,6 +81,18 @@ window.__ModuleLoader__.load({
         searching: '搜索中…',
         signingIn: '登录中…',
         loadFailed: '歌单载入失败',
+        linked: '链接中',
+        disconnected: '已断开',
+        playButtonOn: '播放中',
+        playButtonOff: '点击播放',
+        addedHint: '添加成功',
+        duplicate: '已有重复歌单',
+        emptyPlaylist: '空',
+        emptyHint: '歌单为空',
+        badFormat: '格式错误',
+        volume: '音量',
+        volumeUp: '增加 1%',
+        volumeDown: '减少 1%',
         searchFailed: '搜索失败',
         noResults: '没有找到结果',
         loginFailed: '登录失败',
@@ -128,6 +146,18 @@ window.__ModuleLoader__.load({
         searching: 'Searching…',
         signingIn: 'Signing in…',
         loadFailed: 'Playlist failed',
+        linked: 'Connected',
+        disconnected: 'Disconnected',
+        playButtonOn: 'Playing',
+        playButtonOff: 'Tap to play',
+        addedHint: 'Added successfully',
+        duplicate: 'That playlist is already in the list',
+        emptyPlaylist: 'Empty',
+        emptyHint: 'This playlist is empty',
+        badFormat: 'Invalid link',
+        volume: 'Volume',
+        volumeUp: 'Raise 1%',
+        volumeDown: 'Lower 1%',
         searchFailed: 'Search failed',
         noResults: 'No results',
         loginFailed: 'Sign-in failed',
@@ -422,7 +452,123 @@ window.__ModuleLoader__.load({
       ])
     }
 
+    /**
+     * Broken chain: the same two half-links, pulled apart, plus a slash. Reads as
+     * "not connected" even at 14px, where fine detail is lost.
+     */
+    function iconUnlink(size) {
+      return svg(size, [
+        h('path', {
+          key: 'a',
+          d: 'M11.2 14.4a3.2 3.2 0 0 0 4.4-.2l1.9-1.9a3.2 3.2 0 0 0-4.2-4.8',
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.7,
+          strokeLinecap: 'round',
+        }),
+        h('path', {
+          key: 'b',
+          d: 'M12.8 9.6a3.2 3.2 0 0 0-4.4.2l-1.9 1.9a3.2 3.2 0 0 0 4.2 4.8',
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.7,
+          strokeLinecap: 'round',
+        }),
+        h('path', {
+          key: 'slash',
+          d: 'M5 5 19 19',
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.7,
+          strokeLinecap: 'round',
+          opacity: 0.9,
+        }),
+      ])
+    }
+
+    /**
+     * Link with a small plus in the top-right corner: "add a playlist link".
+     * The chain is scaled down so the plus keeps a clear margin at 14px.
+     */
+    function iconLinkAdd(size) {
+      return svg(size, [
+        h(
+          'g',
+          { key: 'chain', transform: 'translate(-2.4 2.6) scale(0.82)' },
+          h('path', {
+            key: 'a',
+            d: 'M10.4 13.6a3.5 3.5 0 0 0 5 0l2.2-2.2a3.5 3.5 0 0 0-5-5l-1.1 1.1',
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: 2,
+            strokeLinecap: 'round',
+          }),
+          h('path', {
+            key: 'b',
+            d: 'M13.6 10.4a3.5 3.5 0 0 0-5 0l-2.2 2.2a3.5 3.5 0 0 0 5 5l1.1-1.1',
+            fill: 'none',
+            stroke: 'currentColor',
+            strokeWidth: 2,
+            strokeLinecap: 'round',
+          }),
+        ),
+        h('path', {
+          key: 'plus-v',
+          d: 'M18.6 2.9v5.4',
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 2,
+          strokeLinecap: 'round',
+        }),
+        h('path', {
+          key: 'plus-h',
+          d: 'M15.9 5.6h5.4',
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 2,
+          strokeLinecap: 'round',
+        }),
+      ])
+    }
+
+    /** Small filled triangle, used by the volume stepper. */
+    function iconCaret(dir, size) {
+      return svg(size, [
+        h('path', {
+          key: dir,
+          d: dir === 'up' ? 'M12 7.5 18 16H6z' : 'M12 16.5 6 8h12z',
+          fill: 'currentColor',
+        }),
+      ])
+    }
+
+    /** Triangle with an exclamation mark: the link in this row is not playable. */
+
+    function iconWarn(size) {
+      return svg(size, [
+        h('path', {
+          key: 'tri',
+          d: 'M12 3.6 21 19.4H3z',
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.8,
+          strokeLinejoin: 'round',
+        }),
+        h('path', {
+          key: 'bar',
+          d: 'M12 9.4v4.4',
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.8,
+          strokeLinecap: 'round',
+        }),
+        h('circle', { key: 'dot', cx: 12, cy: 16.6, r: 1.05, fill: 'currentColor' }),
+      ])
+    }
+
     function iconUser(size) {
+
+
       return svg(size, [
         h('circle', {
           key: 'head',
@@ -444,47 +590,40 @@ window.__ModuleLoader__.load({
       ])
     }
 
+    /**
+     * Repeat-one: two parallel tracks with arrowheads (the shape everyone reads as
+     * "loop"), plus a bold "1" in the gap. The previous circular arrow looked like a
+     * refresh button, which is why it read as ugly rather than as repeat.
+     */
+    /**
+     * Repeat-one: a loop whose two ends are semicircles, thin arrowheads continuing
+     * those arcs, and a bold "1" in the middle. The straights sit close to the rim so
+     * the centre stays free for the digit.
+     */
+    /**
+     * Repeat-one glyph taken verbatim from Lucide (ISC licence, © Lucide Icons and
+     * Contributors, https://lucide.dev/icons/repeat-1). Lucide applies the stroke
+     * defaults on the root <svg>; this bundle builds icons element by element, so the
+     * same properties are set per path. Notice: docs/THIRD_PARTY.md.
+     */
     function iconRepeat(size) {
-      // Bold loop + a drawn "1": a text glyph this small turned to mush.
+      const stroke = {
+        fill: 'none',
+        stroke: 'currentColor',
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round',
+      }
       return svg(size, [
-        h('circle', {
-          key: 'ring',
-          cx: 12,
-          cy: 12.4,
-          r: 8.2,
-          fill: 'none',
-          stroke: 'currentColor',
-          strokeWidth: 2,
-        }),
-        h('path', {
-          key: 'arrow',
-          d: 'M12.2 2.6 15.1 5.4 12.2 8.2',
-          fill: 'none',
-          stroke: 'currentColor',
-          strokeWidth: 2,
-          strokeLinecap: 'round',
-          strokeLinejoin: 'round',
-        }),
-        h('path', {
-          key: 'one',
-          d: 'M10.4 10.2 12.9 8.8 V15.6',
-          fill: 'none',
-          stroke: 'currentColor',
-          strokeWidth: 2.3,
-          strokeLinecap: 'round',
-          strokeLinejoin: 'round',
-        }),
-        h('path', {
-          key: 'oneBase',
-          d: 'M10.1 15.7 H15',
-          fill: 'none',
-          stroke: 'currentColor',
-          strokeWidth: 2.1,
-          strokeLinecap: 'round',
-        }),
+        // Paths verbatim from Lucide; only the stroke weights follow this icon set
+        // (arrows thinner than the tracks, the digit boldest).
+        h('path', { ...stroke, key: 'arrowUp', strokeWidth: 1.5, d: 'm17 2 4 4-4 4' }),
+        h('path', { ...stroke, key: 'trackUp', strokeWidth: 1.7, d: 'M3 11v-1a4 4 0 0 1 4-4h14' }),
+        h('path', { ...stroke, key: 'arrowDown', strokeWidth: 1.5, d: 'm7 22-4-4 4-4' }),
+        h('path', { ...stroke, key: 'trackDown', strokeWidth: 1.7, d: 'M21 13v1a4 4 0 0 1-4 4H3' }),
+        h('path', { ...stroke, key: 'one', strokeWidth: 2, d: 'M11 10h1v4' }),
+
       ])
     }
-
     function iconShuffle(size) {
       return svg(size, [
         h('path', {
@@ -528,6 +667,18 @@ window.__ModuleLoader__.load({
 
     // ------------------------------------------------------------------- styles
     const CSS = `
+/* MD3-style "state layer" scale: every translucent surface is a tint of the colour
+   it carries (currentColor), so the panel inverts with the theme instead of relying
+   on white alpha values that vanish on a white page. */
+.dshmp-root{--dshmp-mix-4:color-mix(in srgb,currentColor 4%,transparent);
+  --dshmp-mix-8:color-mix(in srgb,currentColor 8%,transparent);
+  --dshmp-mix-12:color-mix(in srgb,currentColor 12%,transparent);
+  --dshmp-mix-16:color-mix(in srgb,currentColor 16%,transparent);
+  --dshmp-mix-22:color-mix(in srgb,currentColor 22%,transparent);
+  --dshmp-mix-28:color-mix(in srgb,currentColor 28%,transparent);
+  --dshmp-mix-58:color-mix(in srgb,currentColor 58%,transparent);
+  --dshmp-ring:color-mix(in srgb,currentColor 18%,transparent);
+  --dshmp-ring-strong:color-mix(in srgb,currentColor 34%,transparent)}
 .dshmp-root{position:fixed;inset:0;pointer-events:none;z-index:60;font-family:inherit;color:var(--dsw-alias-label-primary);--dshmp-beat:.5s}
 .dshmp-root *,.dshmp-root *::before,.dshmp-root *::after{box-sizing:border-box}
 .dshmp-stage{position:absolute;left:0;top:0;pointer-events:auto;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;
@@ -535,17 +686,15 @@ window.__ModuleLoader__.load({
 .dshmp-stage.dshmp-circle{cursor:pointer}
 .dshmp-stage.dshmp-dragging{transition:none;cursor:grabbing}
 .dshmp-stage:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:3px;border-radius:999px}
+/* Light grey frosted glass: the old near-transparent tint vanished on a white
+   backdrop. A grey neutral keeps the surface readable over light and dark alike,
+   while the 4px blur still lets the page show through. */
 .dshmp-glass{position:absolute;inset:0;border-radius:999px;overflow:hidden;
-  background:
-    linear-gradient(158deg,rgba(255,255,255,.024) 0%,rgba(255,255,255,.004) 44%,rgba(255,255,255,.003) 70%,rgba(255,255,255,.012) 100%),
-    rgba(18,20,26,.033);
-  background:
-    linear-gradient(158deg,rgba(255,255,255,.024) 0%,rgba(255,255,255,.004) 44%,rgba(255,255,255,.003) 70%,rgba(255,255,255,.012) 100%),
-    color-mix(in srgb,var(--dsw-alias-bg-layer-1) 4%,transparent);
+  background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 46%,transparent);
   -webkit-backdrop-filter:blur(4px) saturate(150%);backdrop-filter:blur(4px) saturate(150%);
-  border:1px solid rgba(255,255,255,.32);
-  box-shadow:0 12px 34px rgba(0,0,0,.24),0 2px 8px rgba(0,0,0,.12),
-    inset 0 1px 0 rgba(255,255,255,.36),inset 0 -14px 28px rgba(255,255,255,.05)}
+  border:1px solid color-mix(in srgb,currentColor 16%,transparent);
+  box-shadow:0 12px 34px rgba(0,0,0,.18),0 2px 8px rgba(0,0,0,.10),
+    inset 0 1px 0 color-mix(in srgb,currentColor 10%,transparent)}
 .dshmp-vinyl{position:absolute;left:50%;top:50%;z-index:1;display:block;overflow:visible;pointer-events:none;opacity:.8;
   transform:translate(-50%,-50%);filter:drop-shadow(0 3px 10px rgba(0,0,0,.42));
   transition:opacity .26s ease,transform .46s cubic-bezier(.22,.68,.24,1)}
@@ -555,33 +704,30 @@ window.__ModuleLoader__.load({
 .dshmp-controls{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;gap:17px;
   opacity:0;pointer-events:none;transition:opacity .16s ease}
 .dshmp-bar .dshmp-controls{opacity:1;pointer-events:auto;transition:opacity .24s ease .22s}
-.dshmp-btn{display:grid;place-items:center;border:0;padding:0;margin:0;cursor:pointer;border-radius:50%;
-  color:#fefaf2;
-  background:rgba(150,158,172,.55);
-  -webkit-backdrop-filter:blur(9px) saturate(150%);backdrop-filter:blur(9px) saturate(150%);
-  box-shadow:inset 0 0 0 1px rgba(255,255,255,.30);
+.dshmp-btn{display:grid;place-items:center;border:0;padding:0;margin:0;cursor:pointer;
+  color:var(--dsw-alias-label-primary);
+  background:color-mix(in srgb,currentColor 18%,transparent);
+  box-shadow:inset 0 0 0 1px var(--dshmp-ring);
   transition:background .16s ease,transform .14s ease,box-shadow .16s ease}
-.dshmp-btn:hover{background:rgba(158,166,181,.66);box-shadow:inset 0 0 0 1px rgba(255,255,255,.44)}
+.dshmp-btn:hover{background:color-mix(in srgb,currentColor 26%,transparent);box-shadow:inset 0 0 0 1px var(--dshmp-ring-strong)}
 .dshmp-btn:active{transform:scale(.9)}
 .dshmp-btn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
 .dshmp-btn>svg{opacity:.8}
-.dshmp-btn-main{width:51px;height:51px}
-.dshmp-btn-side{width:34px;height:34px;background:rgba(150,158,172,.55)}
-.dshmp-btn-side:hover{background:rgba(158,166,181,.66)}
+.dshmp-btn-main{width:51px;height:51px;border-radius:15px}
+.dshmp-btn-side{width:34px;height:34px;border-radius:10px;background:color-mix(in srgb,currentColor 18%,transparent)}
+.dshmp-btn-side:hover{background:color-mix(in srgb,currentColor 26%,transparent)}
 .dshmp-gear-anchor{position:absolute;left:0;top:0;pointer-events:none}
 /* Buttons clip their own content in Chromium and overflow cannot lift that, so
    every border/glow that may leave the box lives outside the button. The body of
    each small circle is an SVG circle too: nothing is painted from a CSS box, so
    no rounded-square edge can appear. */
-.dshmp-gear{display:grid;place-items:center;border:0;padding:0;margin:0;border-radius:50%;cursor:pointer;
-  color:#fefaf2;background:none;
+.dshmp-gear{display:grid;place-items:center;border:0;padding:0;margin:0;cursor:pointer;
+  color:var(--dsw-alias-label-primary);
+  background:color-mix(in srgb,currentColor 18%,transparent);
+  box-shadow:inset 0 0 0 1px var(--dshmp-ring);border-radius:13px;
   opacity:0;transform:scale(.55);pointer-events:none;
-  transition:opacity .24s ease,transform .34s cubic-bezier(.22,.68,.24,1)}
-.dshmp-gear::before{content:'';position:absolute;inset:0;border-radius:50%;pointer-events:none;
-  background:rgba(150,158,172,.55);
-  -webkit-backdrop-filter:blur(9px) saturate(150%);backdrop-filter:blur(9px) saturate(150%);
-  transition:background .16s ease}
-.dshmp-gear:hover::before{background:rgba(158,166,181,.66)}
+  transition:opacity .24s ease,transform .34s cubic-bezier(.22,.68,.24,1),box-shadow .16s ease}
+.dshmp-gear:hover{background:color-mix(in srgb,currentColor 26%,transparent)}
 .dshmp-gear.dshmp-visible{opacity:1;transform:scale(1);pointer-events:auto}
 .dshmp-gear:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
 .dshmp-gear>svg{z-index:1}
@@ -597,31 +743,20 @@ window.__ModuleLoader__.load({
 .dshmp-mode-wrap-left{right:calc(100% + 9px);transform:translateX(12px) scale(.88)}
 .dshmp-mode-wrap-right{left:calc(100% + 9px);transform:translateX(-12px) scale(.88)}
 .dshmp-mode-wrap.dshmp-mode-on{opacity:1;pointer-events:auto;transform:translateX(0) scale(1)}
-.dshmp-mode::before{content:'';position:absolute;inset:0;border-radius:50%;pointer-events:none;
-  background:rgba(150,158,172,.55);
-  -webkit-backdrop-filter:blur(9px) saturate(150%);backdrop-filter:blur(9px) saturate(150%);
-  transition:background .16s ease}
-.dshmp-mode-wrap:hover .dshmp-mode::before{background:rgba(158,166,181,.66)}
 .dshmp-mode{position:absolute;inset:0;width:100%;height:100%;display:grid;place-items:center;
-  border:0;padding:0;margin:0;border-radius:50%;background:none;cursor:pointer;
-  color:#fefaf2;transition:color .16s ease}
+  border:0;padding:0;margin:0;border-radius:11px;cursor:pointer;
+  color:var(--dsw-alias-label-primary);
+  background:color-mix(in srgb,currentColor 18%,transparent);
+  box-shadow:inset 0 0 0 1px var(--dshmp-ring);
+  transition:color .16s ease,background .16s ease,box-shadow .16s ease}
+/* Hover follows the base rule: an equal-specificity rule written earlier would lose. */
+.dshmp-mode-wrap:hover .dshmp-mode{background:color-mix(in srgb,currentColor 26%,transparent)}
 /* The dot body is an SVG circle (fill driven by CSS so hover still works). */
-.dshmp-mode-wrap.dshmp-selected .dshmp-mode{color:#fefaf2}
+.dshmp-mode-wrap.dshmp-selected .dshmp-mode{color:var(--dsw-alias-label-primary)}
 .dshmp-mode:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
 .dshmp-mode>svg{opacity:.8;z-index:1;transition:opacity .16s ease}
 /* Border, body and running light are SVG circles: nothing comes from a CSS box. */
-.dshmp-ring{position:absolute;inset:-3px;width:calc(100% + 6px);height:calc(100% + 6px);overflow:visible;pointer-events:none;
-  filter:drop-shadow(0 3px 8px rgba(0,0,0,.34))}
-.dshmp-gear-ring{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;filter:drop-shadow(0 3px 8px rgba(0,0,0,.34))}
-/* Repeat-one: a ripple expanding from the glyph centre. */
-.dshmp-ripple{transform-box:fill-box;transform-origin:center;
-  animation:dshmp-ripple calc(var(--dshmp-beat) * 2) ease-out infinite}
-@keyframes dshmp-ripple{
-  0%{opacity:0;transform:scale(.45)}
-  18%{opacity:.55;transform:scale(.85)}
-  70%{opacity:0;transform:scale(1.55)}
-  100%{opacity:0;transform:scale(1.55)}}
-/* Repeat-one: the glyph itself breathes with the ripple. */
+/* Repeat-one: the glyph breathes on the beat and nothing else moves. */
 .dshmp-mode-repeat.dshmp-selected .dshmp-mode>svg{
   animation:dshmp-icon-pulse var(--dshmp-beat) ease-out infinite}
 @keyframes dshmp-icon-pulse{
@@ -642,16 +777,21 @@ window.__ModuleLoader__.load({
 .dshmp-mode:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
 .dshmp-panel{position:absolute;z-index:3;display:flex;flex-direction:column;gap:14px;padding:18px;border-radius:20px;overflow:auto;
   pointer-events:none;opacity:0;visibility:hidden;transform:translateY(8px) scale(.98);
-  background:
-    linear-gradient(160deg,rgba(255,255,255,.15) 0%,rgba(255,255,255,.03) 48%,rgba(255,255,255,.07) 100%),
-    rgba(14,16,22,.50);
-  background:
-    linear-gradient(160deg,rgba(255,255,255,.15) 0%,rgba(255,255,255,.03) 48%,rgba(255,255,255,.07) 100%),
-    color-mix(in srgb,var(--dsw-alias-bg-overlay) 60%,transparent);
+  /* Theme-derived surface: the app's own overlay colour at 58%, so the panel reads
+     the same over a white page and a black one. */
+  background:color-mix(in srgb,var(--dsw-alias-bg-overlay) 58%,transparent);
+  color:var(--dsw-alias-label-primary);
   -webkit-backdrop-filter:blur(26px) saturate(185%);backdrop-filter:blur(26px) saturate(185%);
-  border:1px solid rgba(255,255,255,.26);
-  box-shadow:0 22px 54px rgba(0,0,0,.34),inset 0 1px 0 rgba(255,255,255,.26);
+  border:1px solid color-mix(in srgb,currentColor 16%,transparent);
+  box-shadow:0 22px 54px rgba(0,0,0,.28),inset 0 1px 0 color-mix(in srgb,currentColor 8%,transparent);
   transition:opacity .2s ease,transform .28s cubic-bezier(.22,.68,.24,1),visibility .2s}
+/* Icons inherit the panel's text colour (the MD3 "on" colour): one foreground for
+   the whole panel, flipping with the theme. The invalid-link warning keeps its red,
+   because that colour carries meaning rather than decoration. */
+.dshmp-panel svg,.dshmp-panel .dshmp-iconbtn,.dshmp-panel .dshmp-link-btn,
+.dshmp-panel .dshmp-link-icon,.dshmp-panel .dshmp-spin-btn{color:inherit;opacity:1}
+.dshmp-panel .dshmp-link-btn,.dshmp-panel .dshmp-link-icon,
+.dshmp-panel .dshmp-spin-btn{opacity:1}
 .dshmp-panel.dshmp-visible{opacity:1;visibility:visible;transform:none;pointer-events:auto}
 .dshmp-head{display:flex;align-items:flex-start;gap:10px}
 .dshmp-headtext{flex:1;min-width:0}
@@ -659,12 +799,38 @@ window.__ModuleLoader__.load({
 .dshmp-sub{font-size:13px;line-height:1.4;margin-top:2px;color:var(--dsw-alias-label-secondary)}
 .dshmp-iconbtn{flex:none;width:28px;height:28px;display:grid;place-items:center;border:0;padding:0;border-radius:50%;cursor:pointer;
   background:rgba(255,255,255,.12);color:var(--dsw-alias-label-secondary);
-  transition:background .16s ease,color .16s ease}
-.dshmp-iconbtn:hover{background:rgba(255,255,255,.24);color:var(--dsw-alias-label-primary)}
+  box-shadow:inset 0 0 0 1px var(--dshmp-ring);
+  transition:background .16s ease,color .16s ease,box-shadow .16s ease}
+.dshmp-iconbtn:hover{background:var(--dshmp-mix-22);color:var(--dsw-alias-label-primary);box-shadow:inset 0 0 0 1px var(--dshmp-ring-strong)}
 .dshmp-field{display:flex;align-items:center;gap:10px;height:44px;padding:0 13px;border-radius:999px;
   background:rgba(255,255,255,.10);color:var(--dsw-alias-label-secondary);
-  box-shadow:inset 0 0 0 1px rgba(255,255,255,.16);transition:background .18s ease,box-shadow .18s ease}
-.dshmp-field:focus-within{background:rgba(255,255,255,.17);box-shadow:inset 0 0 0 1px rgba(255,255,255,.36);color:var(--dsw-alias-label-primary)}
+  box-shadow:inset 0 0 0 1px var(--dshmp-ring);transition:background .18s ease,box-shadow .18s ease}
+.dshmp-field:focus-within{background:var(--dshmp-mix-12);box-shadow:inset 0 0 0 1px var(--dshmp-ring-strong);color:var(--dsw-alias-label-primary)}
+.dshmp-field.dshmp-field-on{box-shadow:inset 0 0 0 1px rgba(253,250,242,.34)}
+.dshmp-rows{display:flex;flex-direction:column;gap:6px}
+.dshmp-plrow{margin:0}
+.dshmp-link-icon{flex:none;width:20px;height:20px;display:grid;place-items:center;color:var(--dsw-alias-label-secondary);opacity:.7}
+.dshmp-link-btn{flex:none;width:22px;height:22px;display:grid;place-items:center;padding:0;border:0;border-radius:50%;cursor:pointer;
+  background:transparent;color:var(--dsw-alias-label-secondary);opacity:.65;
+  box-shadow:inset 0 0 0 1px var(--dshmp-ring);
+  transition:background .16s ease,color .16s ease,opacity .16s ease,box-shadow .16s ease}
+.dshmp-link-btn:hover{background:var(--dshmp-mix-16);color:var(--dsw-alias-label-primary);opacity:1;box-shadow:inset 0 0 0 1px var(--dshmp-ring-strong)}
+.dshmp-link-btn.dshmp-link-on{color:inherit;opacity:1;cursor:default;pointer-events:none;transition:none}
+.dshmp-link-btn.dshmp-link-on:hover{background:transparent;color:inherit;opacity:1}
+.dshmp-link-btn:disabled{cursor:default}
+.dshmp-link-btn.dshmp-link-bad{color:var(--dsw-alias-state-error-primary,#f87171);opacity:1;cursor:default;pointer-events:none;transition:none}
+.dshmp-link-btn.dshmp-link-warn{color:var(--dsw-alias-state-warn-primary,#f5b73d);opacity:1;cursor:default;pointer-events:none;transition:none}
+.dshmp-link-btn.dshmp-link-warn:hover{background:transparent;color:var(--dsw-alias-state-warn-primary,#f5b73d)}
+.dshmp-link-btn.dshmp-link-bad:hover{background:transparent;color:var(--dsw-alias-state-error-primary,#f87171)}
+.dshmp-inline-btn.dshmp-inline-btn-bad{color:var(--dsw-alias-state-error-primary,#f87171);background:rgba(248,113,113,.16);cursor:default;pointer-events:none;transition:none;box-shadow:none}
+.dshmp-inline-btn.dshmp-inline-btn-warn{color:var(--dsw-alias-state-warn-primary,#f5b73d);background:rgba(245,183,61,.18);cursor:default;pointer-events:none;transition:none;box-shadow:none}
+.dshmp-inline-btn.dshmp-inline-btn-bad:hover{background:rgba(248,113,113,.16)}
+.dshmp-link-btn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
+.dshmp-link-icon.dshmp-link-add{opacity:.85}
+.dshmp-inline-btn.dshmp-inline-btn-on{color:var(--dsw-alias-label-primary);background:var(--dshmp-mix-12);cursor:default;
+  pointer-events:none;transition:none;box-shadow:none}
+.dshmp-inline-btn.dshmp-inline-btn-on:hover{background:var(--dshmp-mix-12);color:var(--dsw-alias-label-primary)}
+.dshmp-inline-btn:disabled{cursor:default}
 .dshmp-input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:14.5px;line-height:1.28}
 .dshmp-input::placeholder{color:var(--dsw-alias-label-secondary);opacity:.9}
 .dshmp-badge{flex:none;font-size:12px;line-height:1;padding:3px 7px;border-radius:999px;white-space:nowrap;
@@ -680,8 +846,9 @@ window.__ModuleLoader__.load({
 .dshmp-label-row{display:flex;align-items:center;gap:6px}
 .dshmp-help-btn{flex:none;width:15px;height:15px;display:grid;place-items:center;border:0;padding:0;border-radius:50%;
   background:rgba(255,255,255,.16);color:var(--dsw-alias-label-secondary);font:inherit;font-size:10px;line-height:1;cursor:pointer;
-  transition:background .16s ease,color .16s ease}
-.dshmp-help-btn:hover{background:rgba(255,255,255,.3);color:var(--dsw-alias-label-primary)}
+  box-shadow:inset 0 0 0 1px var(--dshmp-ring);
+  transition:background .16s ease,color .16s ease,box-shadow .16s ease}
+.dshmp-help-btn:hover{background:var(--dshmp-mix-22);color:var(--dsw-alias-label-primary)}
 .dshmp-help{display:flex;flex-direction:column;gap:4px;margin:0;padding:10px 12px 10px 30px;border-radius:10px;
   background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px rgba(255,255,255,.10);
   font-size:14px;line-height:1.6;color:var(--dsw-alias-label-secondary)}
@@ -692,44 +859,70 @@ window.__ModuleLoader__.load({
   background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
 .dshmp-track{display:flex;align-items:center;gap:8px;min-height:34px;padding:6px 10px;border:0;border-radius:9px;cursor:pointer;
   background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13.5px;text-align:left}
-.dshmp-track:hover{background:rgba(255,255,255,.12)}
-.dshmp-track.dshmp-current{background:rgba(255,255,255,.22)}
+.dshmp-track:hover{background:var(--dshmp-mix-8)}
+.dshmp-track.dshmp-current{background:var(--dshmp-mix-16)}
 .dshmp-track-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dshmp-track-dur{flex:none;font-size:12.5px;opacity:.6;font-variant-numeric:tabular-nums}
 .dshmp-inline-btn{flex:none;height:24px;padding:0 10px;border:0;border-radius:999px;cursor:pointer;
-  background:rgba(255,255,255,.24);color:inherit;font:inherit;font-size:11px;transition:background .16s ease}
-.dshmp-inline-btn:hover{background:rgba(255,255,255,.38)}
+  background:rgba(255,255,255,.24);color:inherit;font:inherit;font-size:11px;
+  box-shadow:inset 0 0 0 1px var(--dshmp-ring);
+  transition:background .16s ease,box-shadow .16s ease}
+.dshmp-inline-btn:hover{background:var(--dshmp-mix-22);box-shadow:inset 0 0 0 1px var(--dshmp-ring-strong)}
 .dshmp-progress{position:absolute;left:14px;right:14px;bottom:2px;z-index:3;display:flex;align-items:center;
   height:10px;cursor:pointer;touch-action:none;opacity:0;transition:opacity .2s ease}
 .dshmp-bar .dshmp-progress{opacity:1}
 .dshmp-circle .dshmp-progress{pointer-events:none}
 .dshmp-progress::before{content:'';position:absolute;left:0;right:0;top:50%;height:2px;margin-top:-1px;border-radius:2px;
-  background:rgba(255,255,255,.16)}
-.dshmp-progress:hover::before{background:rgba(255,255,255,.28)}
+  background:rgba(120,128,142,.42)}
+.dshmp-progress:hover::before{background:rgba(120,128,142,.62)}
 .dshmp-progress span{position:relative;display:block;height:2px;border-radius:2px;background:rgba(255,255,255,.72);
   transition:width .25s linear}
-.dshmp-time{display:flex;align-items:center;gap:8px}
-.dshmp-time-label{flex:none;min-width:38px;font-size:12.5px;text-align:center;opacity:.65;font-variant-numeric:tabular-nums}
-.dshmp-seek,.dshmp-volume-track{position:relative;flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.14);
-  cursor:pointer;touch-action:none}
-.dshmp-seek:hover,.dshmp-volume-track:hover{background:rgba(255,255,255,.22)}
-.dshmp-seek-fill{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:rgba(255,255,255,.66);pointer-events:none}
+/* Both slider rows share one grid, so the seek track and the volume track start and
+   end at exactly the same x. Columns: leading label / track / trailing cluster. */
+.dshmp-slider-row{display:grid;grid-template-columns:34px minmax(0,1fr) 72px;align-items:center;gap:8px}
+.dshmp-time-label{font-size:12.5px;text-align:right;opacity:.65;font-variant-numeric:tabular-nums;white-space:nowrap}
+.dshmp-volume .dshmp-iconbtn{justify-self:start}
+.dshmp-volvalue{display:flex;align-items:center;justify-content:flex-end;gap:1px}
+.dshmp-volinput{width:30px;height:20px;padding:0 2px;border:0;border-radius:4px;background:transparent;color:inherit;
+  font:inherit;font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums;-moz-appearance:textfield;appearance:textfield}
+.dshmp-volinput::-webkit-outer-spin-button,.dshmp-volinput::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.dshmp-volinput:focus-visible{outline:1px solid var(--dshmp-ring-strong);outline-offset:1px}
+.dshmp-volpct{font-size:11px;opacity:.6}
+.dshmp-spin{display:flex;flex-direction:column;gap:2px;margin-left:2px}
+.dshmp-spin-btn{width:17px;height:13px;display:grid;place-items:center;padding:0;border:0;border-radius:4px;
+  background:rgba(255,255,255,.10);color:inherit;opacity:.8;cursor:pointer;
+  transition:opacity .14s ease,background .14s ease}
+.dshmp-spin-btn:hover{opacity:1;background:rgba(255,255,255,.26)}
+.dshmp-spin-btn:hover{opacity:1;background:var(--dshmp-mix-16)}
+.dshmp-spin-btn:focus-visible{outline:1px solid var(--dshmp-ring-strong);outline-offset:1px}
+/* A real 1px border (not an inset shadow): the fill is painted inside the padding
+   box, so the ring stays visible along the played part as well. */
+.dshmp-seek,.dshmp-volume-track{position:relative;flex:1;height:6px;border-radius:3px;background:var(--dshmp-mix-8);
+  border:1px solid var(--dshmp-ring);cursor:pointer;touch-action:none}
+.dshmp-seek:hover,.dshmp-volume-track:hover{background:var(--dshmp-mix-16)}
+.dshmp-seek-fill{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--dshmp-mix-58);pointer-events:none}
+/* Volume reads as two different things, not one strip at two opacities: the filled
+   part is solid ivory ("now"), the rest is a darker grey well ("still available"). */
+.dshmp-volume-track{background:var(--dshmp-mix-16)}
+.dshmp-volume-track:hover{background:var(--dshmp-mix-22)}
+.dshmp-volume-track .dshmp-volume-fill{background:var(--dsw-alias-label-primary);box-shadow:0 0 0 1px var(--dshmp-ring)}
+.dshmp-volume-track .dshmp-seek-knob{background:var(--dsw-alias-label-primary)}
 .dshmp-seek-knob{position:absolute;top:50%;width:10px;height:10px;margin-left:-5px;border-radius:50%;background:#fff;pointer-events:none;
   transform:translateY(-50%);box-shadow:0 1px 4px rgba(0,0,0,.45);opacity:0;transition:opacity .15s ease}
 .dshmp-seek:hover .dshmp-seek-knob,.dshmp-scrubbing .dshmp-seek-knob,.dshmp-volume-track:hover .dshmp-seek-knob{opacity:1}
 .dshmp-scrubbing span{transition:none}
-.dshmp-volume{display:flex;align-items:center;gap:8px}
 .dshmp-audio{display:none}
 .dshmp-pills{display:flex;gap:8px;flex-wrap:wrap}
 .dshmp-pill{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 14px;border:0;border-radius:999px;cursor:pointer;
   font:inherit;font-size:13.5px;color:var(--dsw-alias-label-secondary);background:rgba(255,255,255,.10);
-  box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);
+  box-shadow:inset 0 0 0 1px var(--dshmp-ring);
   transition:background .16s ease,color .16s ease,box-shadow .16s ease}
-.dshmp-pill:hover{background:rgba(255,255,255,.20);color:var(--dsw-alias-label-primary)}
-.dshmp-pill.dshmp-on{background:rgba(255,255,255,.32);color:var(--dsw-alias-label-primary);box-shadow:inset 0 0 0 1px rgba(255,255,255,.44)}
+.dshmp-pill:hover{background:var(--dshmp-mix-16);color:var(--dsw-alias-label-primary)}
+.dshmp-pill.dshmp-on{background:var(--dshmp-mix-22);color:var(--dsw-alias-label-primary);box-shadow:inset 0 0 0 1px var(--dshmp-ring-strong)}
 .dshmp-pill:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
 .dshmp-msg{font-size:13px;line-height:1.45;color:var(--dsw-alias-state-success-primary);opacity:0;transform:translateY(-2px);transition:opacity .2s ease,transform .2s ease}
 .dshmp-msg.dshmp-on{opacity:1;transform:none}
+.dshmp-msg.dshmp-warn{color:var(--dsw-alias-state-warn-primary,#f5b73d)}
 .dshmp-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12.5px;line-height:1.4;padding-top:9px;border-top:1px solid rgba(255,255,255,.10);color:var(--dsw-alias-label-secondary)}
 .dshmp-build{flex:none;opacity:.75;font-variant-numeric:tabular-nums}
 @keyframes dshmp-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
@@ -737,8 +930,20 @@ window.__ModuleLoader__.load({
 @media (prefers-reduced-motion: reduce){
   .dshmp-stage,.dshmp-vinyl,.dshmp-panel,.dshmp-gear{transition-duration:.01ms!important}
   .dshmp-disc-spin{animation:none}
-  .dshmp-ripple,.dshmp-mode-wrap.dshmp-selected .dshmp-mode>svg{animation:none}
+  .dshmp-mode-wrap.dshmp-selected .dshmp-mode>svg{animation:none}
 }
+
+/* Typography: heading follows the DSH body font size; body text is heading - 3px and
+   hints are heading - 4px, so the whole panel scales with the host's setting. The
+   per-element sizes above stay as fallbacks if the variable is missing. */
+.dshmp-panel{--dshmp-h:var(--dsh-content-font-size,16px)}
+.dshmp-panel,.dshmp-panel *{font-size:calc(var(--dshmp-h) - 3px)}
+.dshmp-panel .dshmp-title,.dshmp-panel .dshmp-sect-label{font-size:var(--dshmp-h)}
+.dshmp-panel .dshmp-msg,.dshmp-panel .dshmp-note,.dshmp-panel .dshmp-help,
+.dshmp-panel .dshmp-help-example,.dshmp-panel .dshmp-foot{font-size:calc(var(--dshmp-h) - 4px)}
+/* A duplicate playlist flashes its border red for three seconds, then fades out. */
+.dshmp-field.dshmp-field-dup{box-shadow:inset 0 0 0 1px var(--dsw-alias-state-warn-primary,#f5b73d);
+  transition:box-shadow .6s ease}
 `
 
     // ------------------------------------------------------------------ player
@@ -795,8 +1000,19 @@ window.__ModuleLoader__.load({
         const [hint, setHint] = useState('')
         const [busy, setBusy] = useState('')
         const [search, setSearch] = useState('')
-        const [playlist, setPlaylist] = useState('')
         const [activeLink, setActiveLink] = useState('')
+        // Multiple playlist rows: every row is a committed link, and exactly one
+        // is "connected" (its tracks are the ones loaded). The trailing draft row
+        // is UI-only and always present, so there is always somewhere to type.
+        const [plists, setPlists] = useState([])
+        const [activeId, setActiveId] = useState(0)
+        const [draft, setDraft] = useState('')
+        // Row id whose field is flashing red because its link already existed.
+        const [dupId, setDupId] = useState(0)
+        // '' = neutral message, 'warn' = yellow.
+        const [hintKind, setHintKind] = useState('')
+        // The connected playlist loaded fine but holds zero tracks.
+        const [activeEmpty, setActiveEmpty] = useState(false)
 
         const [tracks, setTracks] = useState([])
         const [playlistTitle, setPlaylistTitle] = useState('')
@@ -811,7 +1027,10 @@ window.__ModuleLoader__.load({
         const [duration, setDuration] = useState(0)
         const [scrub, setScrubState] = useState(null)
         const [volume, setVolume] = useState(() => {
-          const raw = Number(readStore(VOLUME_KEY))
+          // readStore returns null when the key is unset; Number(null) is 0, which
+          // would silently start the player at zero volume.
+          const stored = readStore(VOLUME_KEY)
+          const raw = stored === null || stored === '' ? NaN : Number(stored)
           return Number.isFinite(raw) && raw >= 0 && raw <= 1 ? raw : 0.8
         })
         const [muted, setMuted] = useState(false)
@@ -820,10 +1039,15 @@ window.__ModuleLoader__.load({
           () =>
             readPosition() || {
               x: Math.max(MARGIN, viewport.w - diameter - 28),
-              y: Math.round(viewport.h * 0.58),
+              y: Math.round(Math.max(TOP_INSET, viewport.h * 0.58)),
             },
         )
         const positionRef = useRef(position)
+        const plistsRef = useRef([])
+        const activeIdRef = useRef(0)
+        const nextRowIdRef = useRef(1)
+        const dupTimerRef = useRef(null)
+        const rowSeqRef = useRef(0)
         const dragRef = useRef(null)
         const hintTimer = useRef(null)
         const anchorRef = useRef(null)
@@ -882,13 +1106,17 @@ window.__ModuleLoader__.load({
         const width = phase === 'circle' ? diameter : barWidth
         const stage = {
           x: clamp(position.x, MARGIN, Math.max(MARGIN, viewport.w - width - MARGIN)),
-          y: clamp(position.y, MARGIN, Math.max(MARGIN, viewport.h - diameter - MARGIN)),
+          y: clamp(position.y, TOP_INSET, Math.max(TOP_INSET, viewport.h - diameter - MARGIN)),
         }
 
-        const flash = (message) => {
+        const flash = (message, kind) => {
           setHint(message)
+          setHintKind(kind || '')
           if (hintTimer.current) clearTimeout(hintTimer.current)
-          hintTimer.current = setTimeout(() => setHint(''), 3200)
+          hintTimer.current = setTimeout(() => {
+            setHint('')
+            setHintKind('')
+          }, 3200)
         }
 
         /** Persist player settings into the plugin package (host side). */
@@ -927,7 +1155,7 @@ window.__ModuleLoader__.load({
           const fallbackX = stage.x + barWidth / 2 - diameter / 2
           setPosition({
             x: clamp(anchor ? anchor.x : fallbackX, MARGIN, Math.max(MARGIN, viewport.w - diameter - MARGIN)),
-            y: clamp(anchor ? anchor.y : stage.y, MARGIN, Math.max(MARGIN, viewport.h - diameter - MARGIN)),
+            y: clamp(anchor ? anchor.y : stage.y, TOP_INSET, Math.max(TOP_INSET, viewport.h - diameter - MARGIN)),
           })
           setPhase('circle')
           setPanelOpen(false)
@@ -986,7 +1214,7 @@ window.__ModuleLoader__.load({
           }
           setPosition({
             x: clamp(drag.originX + dx, MARGIN, Math.max(MARGIN, viewport.w - width - MARGIN)),
-            y: clamp(drag.originY + dy, MARGIN, Math.max(MARGIN, viewport.h - diameter - MARGIN)),
+            y: clamp(drag.originY + dy, TOP_INSET, Math.max(TOP_INSET, viewport.h - diameter - MARGIN)),
           })
         }
 
@@ -1013,7 +1241,7 @@ window.__ModuleLoader__.load({
                   MARGIN,
                   Math.max(MARGIN, viewport.w - diameter - MARGIN),
                 ),
-                y: clamp(stage.y, MARGIN, Math.max(MARGIN, viewport.h - diameter - MARGIN)),
+                y: clamp(stage.y, TOP_INSET, Math.max(TOP_INSET, viewport.h - diameter - MARGIN)),
               }
             }
             return
@@ -1031,12 +1259,19 @@ window.__ModuleLoader__.load({
         const togglePlay = (event) => {
           event.stopPropagation()
           const audio = audioRef.current
+          // The empty-playlist verdict belongs here, at the moment the user asks to
+          // play: loading an empty playlist is not an error by itself.
+          if (!tracks.length) {
+            if (activeIdRef.current) {
+              setActiveEmpty(true)
+              flash(t('emptyHint'), 'warn')
+            } else {
+              flash(t('noPlaylist'), 'warn')
+            }
+            return
+          }
           if (!audio) return
           if (!audio.getAttribute('src')) {
-            if (!tracks.length) {
-              flash(t('noPlaylist'))
-              return
-            }
             const index = currentIndex < 0 ? 0 : currentIndex
             playTrack(tracks[index], index, false)
             return
@@ -1295,6 +1530,24 @@ window.__ModuleLoader__.load({
           setMuted((value) => !value)
         }
 
+        /**
+         * Set the volume from a percentage. The typed value and the +/- triangles
+         * both land here, so the clamp to 0..100 lives in one place.
+         */
+        const setVolumePercent = (percent) => {
+          const numeric = Number(percent)
+          if (!Number.isFinite(numeric)) return
+          const clamped = Math.max(0, Math.min(100, Math.round(numeric)))
+          setVolume(clamped / 100)
+          if (clamped > 0 && muted) setMuted(false)
+        }
+
+        const stepVolume = (delta) => (event) => {
+          event.stopPropagation()
+          event.preventDefault()
+          setVolumePercent(Math.round(volume * 100) + delta)
+        }
+
         /** Mode is sticky: chosen once, kept across expand/collapse and reloads. */
         const chooseMode = (next) => {
           setMode(next)
@@ -1358,34 +1611,176 @@ window.__ModuleLoader__.load({
           return body
         }
 
-        const loadPlaylist = async (link, page) => {
-          const target = String(link || playlist || '').trim()
+        /** Only public Bilibili favourite-folder links are accepted. */
+        function badFormat(link) {
+          return !String(link || '').trim().startsWith('https://www.bilibili.com/medialist/detail/ml')
+        }
+
+        /** Drop everything that belongs to the playlist that is being left. */
+
+        function clearPlaylistCache() {
+          setTracks([])
+          tracksRef.current = []
+          setPlaylistTitle('')
+          setPlaylistPage(1)
+          setHasMore(false)
+          setCurrentIndex(-1)
+          setActiveEmpty(false)
+          writeStore(TRACKS_KEY, '')
+          const audio = audioRef.current
+          if (audio) {
+            try {
+              audio.pause()
+            } catch (error) {
+              /* a detached element cannot pause; the next load replaces it */
+            }
+          }
+          setPlaying(false)
+          setProgress(0)
+        }
+
+        /**
+         * Make one row the connected playlist: it becomes the only source of
+         * tracks, the previous cache is dropped, and a stale in-flight response is
+         * discarded by comparing the load sequence number.
+         */
+        async function activateRow(id, link) {
+          const target = String(link || '').trim()
           if (!target) return
+          if (badFormat(target)) {
+            flash(t('badFormat'))
+            return
+          }
+          const seq = ++rowSeqRef.current
+          activeIdRef.current = id
+          setActiveId(id)
           setActiveLink(target)
+          clearPlaylistCache()
+          writeStore(LINK_KEY, target)
+          saveSettings({ link: target, activeId: id })
+          if (typeof fetch !== 'function') return
           setBusy(t('loadingPlaylist'))
           try {
-            const body = await api('/api/playlist', { link: target, page: String(page || 1) })
+            const body = await api('/api/playlist', { link: target, page: '1' })
+            if (seq !== rowSeqRef.current) return // a newer row won; stay silent
             const items = Array.isArray(body.items) ? body.items : []
-            setTracks((previous) => ((page || 1) > 1 ? previous.concat(items) : items))
+            // Switching to an empty playlist is decided right here, so the row flips
+            // from 播放中 to 空 as soon as it is connected.
+            setActiveEmpty(items.length === 0)
+            setTracks(items)
             setPlaylistTitle(String(body.title || ''))
-            setPlaylistPage(page || 1)
+            setPlaylistPage(1)
             setHasMore(Boolean(body.hasMore))
-            setPlaylist(target)
-            writeStore(LINK_KEY, target)
-            saveSettings({ link: target })
-            if ((page || 1) === 1) {
-              writeStore(TRACKS_KEY, JSON.stringify({ title: body.title || '', items }))
-            }
+            writeStore(TRACKS_KEY, JSON.stringify({ title: body.title || '', items }))
           } catch (error) {
-            flash(t('loadFailed') + '：' + error.message)
+            if (seq === rowSeqRef.current) flash(t('loadFailed') + '：' + error.message)
           } finally {
-            setBusy('')
+            if (seq === rowSeqRef.current) setBusy('')
           }
         }
 
-        const submitPlaylist = (event) => {
-          event.preventDefault()
-          loadPlaylist(playlist, 1)
+        /** Append the next page of the connected row. */
+        async function loadMoreActive() {
+          const row = plistsRef.current.find((item) => item.id === activeIdRef.current)
+          if (!row) return
+          const seq = rowSeqRef.current
+          const page = playlistPage + 1
+          setBusy(t('loadingPlaylist'))
+          try {
+            const body = await api('/api/playlist', { link: row.link, page: String(page) })
+            if (seq !== rowSeqRef.current) return
+            const items = Array.isArray(body.items) ? body.items : []
+            setTracks((previous) => previous.concat(items))
+            setPlaylistPage(page)
+            setHasMore(Boolean(body.hasMore))
+          } catch (error) {
+            if (seq === rowSeqRef.current) flash(t('loadFailed') + '：' + error.message)
+          } finally {
+            if (seq === rowSeqRef.current) setBusy('')
+          }
+        }
+
+        function persistRows(rows, active) {
+          saveSettings({ plists: rows, activeId: active })
+        }
+
+        /** Import whatever sits in the trailing draft row as a new playlist. */
+        function importDraft(event) {
+          if (event && event.preventDefault) event.preventDefault()
+          const link = String(draft || '').trim()
+          if (!link) return
+          // The same link twice is meaningless: keep the existing row, flash its
+          // border red for a moment and say why nothing was added.
+          const duplicate = plistsRef.current.find((row) => row.link.trim() === link)
+          if (duplicate) {
+            setDraft('')
+            flash(t('duplicate'), 'warn')
+            setDupId(duplicate.id)
+            if (dupTimerRef.current) clearTimeout(dupTimerRef.current)
+            dupTimerRef.current = setTimeout(() => setDupId(0), 3000)
+            return
+          }
+          const id = nextRowIdRef.current++
+          const rows = plistsRef.current.concat([{ id, link }])
+          plistsRef.current = rows
+          setPlists(rows)
+          setDraft('')
+          // A new row never steals the connection on its own; the user decides by
+          // clicking its play button. Only when nothing is connected (no rows at all,
+          // or a hand-edited settings file) does the import take over.
+          const hasConnection = rows.some((row) => row.id === activeIdRef.current)
+          persistRows(rows, hasConnection ? activeIdRef.current : id)
+          if (hasConnection) {
+            flash(t('addedHint'))
+            return
+          }
+          activateRow(id, link)
+        }
+
+        /** Edit a committed row; clearing it removes the row entirely. */
+        function changeRow(rowId, value) {
+          if (!String(value || '').trim()) {
+            dropRow(rowId)
+            return
+          }
+          const rows = plistsRef.current.map((item) => (item.id === rowId ? { id: rowId, link: value } : item))
+          plistsRef.current = rows
+          setPlists(rows)
+          persistRows(rows, activeIdRef.current)
+        }
+
+        /** Remove a row; if it was the connected one, the first survivor takes over. */
+        function dropRow(rowId) {
+          const rows = plistsRef.current.filter((item) => item.id !== rowId)
+          plistsRef.current = rows
+          setPlists(rows)
+          if (rowId !== activeIdRef.current) {
+            persistRows(rows, activeIdRef.current)
+            return
+          }
+          if (rows.length) {
+            persistRows(rows, rows[0].id)
+            activateRow(rows[0].id, rows[0].link)
+            return
+          }
+          activeIdRef.current = 0
+          setActiveId(0)
+          setActiveLink('')
+          clearPlaylistCache()
+          saveSettings({ activeId: 0, link: '' })
+          persistRows(rows, 0)
+        }
+
+        const submitRow = (row) => (event) => {
+          if (event && event.preventDefault) event.preventDefault()
+          // The connected row is a state, not an action: its button is disabled and
+          // pressing Enter in it must not reload anything either.
+          if (badFormat(row.link)) {
+            flash(t('badFormat'))
+            return
+          }
+          if (row.id === activeIdRef.current) return
+          activateRow(row.id, row.link)
         }
 
         /**
@@ -1404,6 +1799,7 @@ window.__ModuleLoader__.load({
             const fresh = Array.isArray(body.items) ? body.items : []
             const seen = new Set(fresh.map((item) => item.bvid))
             const merged = fresh.concat(tracksRef.current.filter((item) => !seen.has(item.bvid)))
+            if (merged.length) setActiveEmpty(false)
             const title = String(body.title || '') || playlistTitle
             setTracks(merged)
             setPlaylistTitle(title)
@@ -1476,8 +1872,28 @@ window.__ModuleLoader__.load({
               setPosition({ x: saved.position.x, y: saved.position.y })
             }
             const link = typeof saved.link === 'string' && saved.link.trim() ? saved.link : fallback
-            setPlaylist(link)
-            loadPlaylist(link, 1)
+            // Restore the row list; a settings file written by an older build only
+            // has `link`, so seed exactly one row from it.
+            const rows = []
+            if (Array.isArray(saved.plists)) {
+              saved.plists.forEach((row, index) => {
+                const rowLink = row && typeof row.link === 'string' ? row.link.trim() : ''
+                if (!rowLink) return
+                const id = Number.isFinite(row.id) && row.id > 0 ? Math.round(row.id) : index + 1
+                if (rows.some((item) => item.id === id)) return
+                rows.push({ id, link: rowLink })
+              })
+            }
+            if (!rows.length) rows.push({ id: 1, link: link.trim() })
+            nextRowIdRef.current = rows.reduce((max, row) => Math.max(max, row.id), 0) + 1
+            plistsRef.current = rows
+            setPlists(rows)
+            const wanted = Number.isFinite(saved.activeId) ? saved.activeId : 0
+            const active = rows.find((row) => row.id === wanted) || rows[0]
+            activeIdRef.current = active.id
+            setActiveId(active.id)
+            saveSettings({ plists: rows, activeId: active.id })
+            activateRow(active.id, active.link)
           }
           fetch(API_BASE + '/api/settings')
             .then((response) => response.json())
@@ -1498,7 +1914,7 @@ window.__ModuleLoader__.load({
         const gearBelow = stage.y + diameter + GAP + GEAR <= viewport.h - MARGIN
         const gearY = gearBelow
           ? stage.y + diameter + GAP
-          : Math.max(MARGIN, stage.y - GAP - GEAR)
+          : Math.max(TOP_INSET, stage.y - GAP - GEAR)
         const gearX = clamp(
           stage.x + width / 2 - GEAR / 2,
           MARGIN,
@@ -1513,7 +1929,7 @@ window.__ModuleLoader__.load({
         )
         const clusterTop = Math.min(stage.y, gearY)
         const clusterBottom = Math.max(stage.y + diameter, gearY + GEAR)
-        const roomAbove = clusterTop - MARGIN
+        const roomAbove = clusterTop - TOP_INSET
         const placeAbove = roomAbove >= 220
         const panelMaxHeight = Math.max(
           150,
@@ -1536,49 +1952,9 @@ window.__ModuleLoader__.load({
         const displayedTime = duration > 0 ? displayedRatio * duration : 0
         const volumeRatio = muted ? 0 : volume
 
-        // Dot body + 1px border are SVG circles. Motion lives on the icon now:
-        // repeat-one ripples out of the centre, shuffle streams left to right.
-        const modeRing = (kind, active) =>
-          h(
-            'svg',
-            { className: 'dshmp-ring', viewBox: '0 0 44 44', 'aria-hidden': 'true', focusable: 'false' },
-            h('circle', {
-              key: 'base',
-              cx: 22,
-              cy: 22,
-              r: 18.5,
-              fill: 'none',
-              stroke: 'rgba(255,255,255,0.22)',
-              strokeWidth: 1,
-            }),
-            active && kind === 'repeat'
-              ? h('circle', {
-                  key: 'ripple',
-                  className: 'dshmp-ripple',
-                  cx: 22,
-                  cy: 22,
-                  r: 11,
-                  fill: 'none',
-                  stroke: '#ffffff',
-                  strokeWidth: 1.5,
-                })
-              : null,
-          )
+        // The dot's frame is the button's inset ring; the only motion is the glyph
+        // pulse on the selected dot, so no extra SVG layer is needed.
 
-        // Same treatment for the gear: its border is an SVG circle too.
-        const gearRing = () =>
-          h(
-            'svg',
-            { className: 'dshmp-gear-ring', viewBox: '0 0 44 44', 'aria-hidden': 'true', focusable: 'false' },
-            h('circle', {
-              cx: 22,
-              cy: 22,
-              r: 21,
-              fill: 'none',
-              stroke: 'rgba(255,255,255,0.24)',
-              strokeWidth: 1,
-            }),
-          )
 
         const stageClass = [
           'dshmp-stage',
@@ -1683,7 +2059,7 @@ window.__ModuleLoader__.load({
                     cy: 50,
                     r: 49.2,
                     fill: 'none',
-                    stroke: 'rgba(255,255,255,0.22)',
+        stroke: 'rgba(255,255,255,0.22)',
                     strokeWidth: 1.4,
                   }),
                   h('circle', { key: 'label', cx: 50, cy: 50, r: 17, fill: '#ffffff' }),
@@ -1824,7 +2200,6 @@ window.__ModuleLoader__.load({
                   },
                 },
                 iconGear(20),
-                gearRing(),
               ),
               // Playback modes slide out of the gear: repeat-one to the left,
               // shuffle to the right. The selection is sticky and never resets.
@@ -1855,7 +2230,6 @@ window.__ModuleLoader__.load({
                   },
                   iconRepeat(22),
                 ),
-                modeRing('repeat', mode === 'repeat'),
               ),
               h(
                 'div',
@@ -1884,7 +2258,6 @@ window.__ModuleLoader__.load({
                   },
                   iconShuffle(22),
                 ),
-                modeRing('shuffle', mode === 'shuffle'),
               ),
             ),
             h(
@@ -1919,6 +2292,18 @@ window.__ModuleLoader__.load({
                   iconClose(13),
                 ),
               ),
+              // The status line sits directly under the header: at the bottom of a
+              // long panel it scrolled out of sight and looked like it never fired.
+              h(
+                'div',
+                {
+                  className:
+                    'dshmp-msg' +
+                    (hint || busy ? ' dshmp-on' : '') +
+                    (hintKind ? ' dshmp-' + hintKind : ''),
+                },
+                busy || hint,
+              ),
               h(
                 'div',
                 { className: 'dshmp-now' },
@@ -1930,7 +2315,7 @@ window.__ModuleLoader__.load({
                 { className: 'dshmp-sect' },
                 h(
                   'div',
-                  { className: 'dshmp-time' },
+                  { className: 'dshmp-slider-row' },
                   h('span', { className: 'dshmp-time-label' }, formatTime(displayedTime)),
                   h(
                     'div',
@@ -1954,7 +2339,7 @@ window.__ModuleLoader__.load({
                 ),
                 h(
                   'div',
-                  { className: 'dshmp-volume' },
+                  { className: 'dshmp-slider-row dshmp-volume' },
                   h(
                     'button',
                     {
@@ -1976,7 +2361,7 @@ window.__ModuleLoader__.load({
                       onPointerCancel: endVolume,
                     },
                     h('span', {
-                      className: 'dshmp-seek-fill',
+                      className: 'dshmp-seek-fill dshmp-volume-fill',
                       style: { width: Math.round(volumeRatio * 100) + '%' },
                     }),
                     h('span', {
@@ -1984,7 +2369,48 @@ window.__ModuleLoader__.load({
                       style: { left: Math.round(volumeRatio * 100) + '%' },
                     }),
                   ),
-                  h('span', { className: 'dshmp-time-label' }, Math.round(volumeRatio * 100) + '%'),
+                  h(
+                    'div',
+                    { className: 'dshmp-volvalue' },
+                    h('input', {
+                      className: 'dshmp-volinput',
+                      type: 'number',
+                      min: 0,
+                      max: 100,
+                      step: 1,
+                      inputMode: 'numeric',
+                      value: Math.round(volumeRatio * 100),
+                      'aria-label': t('volume'),
+                      onChange: (event) => setVolumePercent(event.target.value),
+                    }),
+                    h('span', { className: 'dshmp-volpct' }, '%'),
+                    h(
+                      'div',
+                      { className: 'dshmp-spin' },
+                      h(
+                        'button',
+                        {
+                          type: 'button',
+                          className: 'dshmp-spin-btn',
+                          title: t('volumeUp'),
+                          'aria-label': t('volumeUp'),
+                          onClick: stepVolume(1),
+                        },
+                        iconCaret('up', 10),
+                      ),
+                      h(
+                        'button',
+                        {
+                          type: 'button',
+                          className: 'dshmp-spin-btn',
+                          title: t('volumeDown'),
+                          'aria-label': t('volumeDown'),
+                          onClick: stepVolume(-1),
+                        },
+                        iconCaret('down', 10),
+                      ),
+                    ),
+                  ),
                 ),
               ),
               h(
@@ -2030,22 +2456,127 @@ window.__ModuleLoader__.load({
                     )
                   : null,
                 h(
-                  'form',
-                  { onSubmit: submitPlaylist },
+                  'div',
+                  { className: 'dshmp-rows' },
+                  plists.map((row) => {
+                    const bad = badFormat(row.link)
+                    const connectedRow = row.id === activeId
+                    // A valid link whose playlist came back empty: same treatment as a
+                    // malformed link, but in the warning colour and with "空".
+                    const emptyRow = connectedRow && activeEmpty && !bad
+                    const rowLabel = bad
+                      ? t('badFormat')
+                      : emptyRow
+                        ? t('emptyPlaylist')
+                        : connectedRow
+                          ? t('linked')
+                          : t('disconnected')
+                    return h(
+                      'form',
+                      { key: 'row-' + row.id, className: 'dshmp-plrow', onSubmit: submitRow(row) },
+                      h(
+                        'div',
+                        {
+                          className:
+                            'dshmp-field' +
+                            (connectedRow ? ' dshmp-field-on' : '') +
+                            (row.id === dupId ? ' dshmp-field-dup' : ''),
+                        },
+                        h(
+                          'button',
+                          {
+                            type: 'button',
+                            className:
+                              'dshmp-link-btn' +
+                              (bad
+                                ? ' dshmp-link-bad'
+                                : emptyRow
+                                  ? ' dshmp-link-warn'
+                                  : connectedRow
+                                    ? ' dshmp-link-on'
+                                    : ''),
+                            title: rowLabel,
+                            'aria-label': rowLabel,
+                            'aria-pressed': connectedRow ? 'true' : 'false',
+                            'data-linked': connectedRow ? '1' : '0',
+                            'data-link-icon': bad
+                              ? 'warn'
+                              : emptyRow
+                                ? 'empty'
+                                : connectedRow
+                                  ? 'link'
+                                  : 'unlink',
+                            disabled: bad || emptyRow || connectedRow,
+                            'aria-disabled': bad || emptyRow || connectedRow ? 'true' : 'false',
+                            onClick: () => {
+                              if (bad || emptyRow) return
+                              if (row.id !== activeIdRef.current) activateRow(row.id, row.link)
+                            },
+                          },
+                          bad || emptyRow ? iconWarn(14) : connectedRow ? iconLink(14) : iconUnlink(14),
+                        ),
+                        h('input', {
+                          className: 'dshmp-input',
+                          type: 'text',
+                          value: row.link,
+                          placeholder: t('playlistPlaceholder'),
+                          spellCheck: false,
+                          enterKeyHint: 'go',
+                          onChange: (event) => changeRow(row.id, event.target.value),
+                        }),
+                        h(
+                          'button',
+                          {
+                            type: 'submit',
+                            className:
+                              'dshmp-inline-btn' +
+                              (bad
+                                ? ' dshmp-inline-btn-bad'
+                                : emptyRow
+                                  ? ' dshmp-inline-btn-warn'
+                                  : connectedRow
+                                    ? ' dshmp-inline-btn-on'
+                                    : ''),
+                            'data-row-action': bad
+                              ? 'invalid'
+                              : emptyRow
+                                ? 'empty'
+                                : connectedRow
+                                  ? 'playing'
+                                  : 'play',
+                            disabled: bad || emptyRow || connectedRow,
+                            'aria-disabled': bad || emptyRow || connectedRow ? 'true' : 'false',
+                          },
+                          bad
+                            ? t('badFormat')
+                            : emptyRow
+                              ? t('emptyPlaylist')
+                              : connectedRow
+                                ? t('playButtonOn')
+                                : t('playButtonOff'),
+                        ),
+                      ),
+                    )
+                  }),                  // The trailing draft row never disappears: there is always one
+                  // empty input waiting for the next link.
                   h(
-                    'div',
-                    { className: 'dshmp-field' },
-                    iconLink(14),
-                    h('input', {
-                      className: 'dshmp-input',
-                      type: 'text',
-                      value: playlist,
-                      placeholder: t('playlistPlaceholder'),
-                      spellCheck: false,
-                      enterKeyHint: 'go',
-                      onChange: (event) => setPlaylist(event.target.value),
-                    }),
-                    h('button', { type: 'submit', className: 'dshmp-inline-btn' }, t('load')),
+                    'form',
+                    { key: 'row-draft', className: 'dshmp-plrow dshmp-plrow-draft', onSubmit: importDraft },
+                    h(
+                      'div',
+                      { className: 'dshmp-field' },
+                      h('span', { className: 'dshmp-link-icon dshmp-link-add' }, iconLinkAdd(14)),
+                      h('input', {
+                        className: 'dshmp-input',
+                        type: 'text',
+                        value: draft,
+                        placeholder: t('playlistPlaceholder'),
+                        spellCheck: false,
+                        enterKeyHint: 'done',
+                        'data-dshmp-draft': '1',
+                        onChange: (event) => setDraft(event.target.value),
+                      }),
+                    ),
                   ),
                 ),
                 h(
@@ -2080,7 +2611,7 @@ window.__ModuleLoader__.load({
                       {
                         type: 'button',
                         className: 'dshmp-pill',
-                        onClick: () => loadPlaylist(playlist, playlistPage + 1),
+                        onClick: () => loadMoreActive(),
                       },
                       t('loadMore'),
                     )
@@ -2160,7 +2691,6 @@ window.__ModuleLoader__.load({
                   t('shuffle'),
                 ),
               ),
-              h('div', { className: 'dshmp-msg' + (hint || busy ? ' dshmp-on' : '') }, busy || hint),
               h(
                 'div',
                 { className: 'dshmp-foot' },

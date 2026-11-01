@@ -16,6 +16,13 @@
 - 局部音量控制
 - 可切换单曲循环/随机播放
 
+**歌单**
+
+- 可以同时放多条收藏夹链接：每行一个，点那一行的「点击播放」切换，链条图标表示当前在用哪一条
+- 链接格式不对时该行变红并写「格式错误」，该行不参与播放
+- 同一条链接重复导入会被挡下（黄框提示「已有重复歌单」），不会多出一行
+- 切到空的收藏夹时，该行立刻显示黄色的「空」
+
 **B 站音源**
 
 - 免登录，直接导入公开收藏夹链接即可使用
@@ -74,6 +81,7 @@ dsh plugin --profile <profile> add link:<本仓库的绝对路径>
 ## 第三方
 
 - 不包含任何第三方插件的代码
+- 「单曲循环」图标取自 [Lucide](https://lucide.dev/icons/repeat-1)（ISC 许可，可商用），署名与许可全文见 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)
 - 唱片中心的图标为原创矢量图形，不含任何角色形象或品牌标识
 - 品牌规范遵循 [DeepSeek Harness Brand Asset Usage Guidelines](https://github.com/deepseek-ai/deepseek-harness/blob/master/BRAND_GUIDELINES.md)：项目名使用 `DSH` 缩写，未使用 "DeepSeek Harness" 全称作为项目名
 - B 站接口细节参考公开社区文档 [bilibili-API-collect](https://github.com/SocialSisterYi/bilibili-API-collect)

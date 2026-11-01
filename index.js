@@ -134,6 +134,24 @@ export function apply(ctx) {
       ) {
         settings.position = { x: Math.round(patch.position.x), y: Math.round(patch.position.y) }
       }
+      if (Array.isArray(patch.plists)) {
+        const rows = []
+        const seen = new Set()
+        for (const row of patch.plists) {
+          if (!row || typeof row.link !== 'string') continue
+          const link = row.link.trim()
+          if (!link) continue
+          const id = Number.isFinite(row.id) && row.id > 0 ? Math.round(row.id) : rows.length + 1
+          if (seen.has(id)) continue
+          seen.add(id)
+          rows.push({ id, link: link.slice(0, 2000) })
+          if (rows.length >= 50) break
+        }
+        settings.plists = rows
+      }
+      if (patch.activeId === null || Number.isFinite(patch.activeId)) {
+        settings.activeId = patch.activeId === null ? 0 : Math.round(patch.activeId)
+      }
       persistSettings()
       return sendJson(res, 200, { ok: true, version: readVersion(), settings })
     }

@@ -19,7 +19,7 @@ function makeStorage() {
   }
 }
 
-function createRuntime(width, height) {
+function createRuntime(width, height, globals) {
   const hooks = []
   let cursor = 0
   const dirty = { value: false }
@@ -73,6 +73,10 @@ function createRuntime(width, height) {
     setTimeout,
     clearTimeout,
     console,
+    // The client uses standard web globals; a vm context does not provide them.
+    URL,
+    URLSearchParams,
+    ...(globals || {}),
   }
   sandbox.window.document = sandbox.document
   windowStub.__ModuleLoader__ = {
@@ -100,7 +104,7 @@ function createRuntime(width, height) {
     if (name === 'react') return React
     throw new Error('unexpected require: ' + name)
   })
-  return { plugin, React, hooks, resetCursor: () => (cursor = 0), dirty }
+  return { plugin, React, hooks, sandbox, resetCursor: () => (cursor = 0), dirty }
 }
 
 function renderTree(runtime, component) {
@@ -211,14 +215,16 @@ function checkSize(width, height) {
   } else {
     const x = Number(transform[1])
     const y = Number(transform[2])
-    if (x < 14 || y < 14) failures.push(width + 'x' + height + ' position off-screen ' + x + ',' + y)
+    if (x < 14) failures.push(width + 'x' + height + ' position off-screen ' + x + ',' + y)
+    if (y < 116) failures.push(width + 'x' + height + ' widget entered the reserved top band: y=' + y)
     if (x + style.width > width - 13) failures.push(width + 'x' + height + ' right overflow ' + (x + style.width))
     if (y + style.height > height - 13) failures.push(width + 'x' + height + ' bottom overflow ' + (y + style.height))
   }
 
   const buttons = countByTag(tree, 'button')
-  // 3 transport + gear + close + load + repeat + shuffle + mute + 2 mode dots + help
-  if (buttons !== 12) failures.push(width + 'x' + height + ' button count ' + buttons + ' expected 12')
+  // 3 transport + gear + close + repeat + shuffle + mute + 2 mode dots + help + 2 volume steps
+  // (the draft row carries no button)
+  if (buttons !== 13) failures.push(width + 'x' + height + ' button count ' + buttons + ' expected 13')
 
   const modeLeft = findNode(tree, (node) => node.props && String(node.props.className).indexOf('dshmp-mode-wrap-left') !== -1)
   const modeRight = findNode(tree, (node) => node.props && String(node.props.className).indexOf('dshmp-mode-wrap-right') !== -1)
@@ -245,25 +251,51 @@ function checkSize(width, height) {
   if (!selectedDot || !plainDot) {
     failures.push(width + 'x' + height + ' one selected and one plain dot expected')
   } else {
-    const selectedRing = findNode(selectedDot, (node) => node.props && node.props.className === 'dshmp-ring')
-    const plainRing = findNode(plainDot, (node) => node.props && node.props.className === 'dshmp-ring')
-    if (!selectedRing || !plainRing) failures.push(width + 'x' + height + ' dot borders must be svg circles')
-    const base = selectedRing && findNode(
-      selectedRing,
-      (node) => node.type === 'circle' && String(node.props.stroke) === 'rgba(255,255,255,0.22)',
-    )
-    if (!base) failures.push(width + 'x' + height + ' 1px circle border missing')
-    else {
-      if (base.props.r !== 18.5) failures.push(width + 'x' + height + ' border radius drifted')
-      if (base.props.strokeWidth !== 1) failures.push(width + 'x' + height + ' border must stay 1px')
+    // Frames come from the buttons themselves now (same inset ring as the transport
+    // buttons), so the three families cannot drift apart again.
+    for (const name of ['dshmp-gear', 'dshmp-mode']) {
+      const rule = new RegExp('^\\.' + name + '\\{([^}]*)\\}', 'm').exec(css)
+      if (!rule || !/box-shadow:inset 0 0 0 1px var\(--dshmp-ring\)/.test(rule[1])) {
+        failures.push(width + 'x' + height + ' ' + name + ' needs the shared inset ring')
+      }
     }
-    // The comet ring is replaced by icon motion: ripple for repeat-one, a
+    if (findNode(tree, (node) => node.props && node.props.className === 'dshmp-gear-ring')) {
+      failures.push(width + 'x' + height + ' the gear must not carry a second frame')
+    }
     // left-to-right light sweep for shuffle.
     if (findNode(tree, (node) => node.props && node.props.className === 'dshmp-ring-arc')) {
       failures.push(width + 'x' + height + ' the comet ring must be gone')
     }
-    if (!/@keyframes dshmp-ripple/.test(css)) {
-      failures.push(width + 'x' + height + ' repeat ripple keyframes missing')
+    // Panel typography: two sizes, both taken from the DSH theme roles. Headings use
+  // the conversation size (--dsh-content-font-size), everything else the code size
+  // (--dsh-code-font-size); the theme writes both on <body>, so they inherit here.
+  if (!/\.dshmp-panel\{--dshmp-h:var\(--dsh-content-font-size,16px\)\}/.test(css)) {
+    failures.push(width + 'x' + height + ' the panel must derive its type scale from the DSH body size')
+  }
+  if (!/\.dshmp-panel,\.dshmp-panel \*\{font-size:calc\(var\(--dshmp-h\) - 3px\)\}/.test(css)) {
+    failures.push(width + 'x' + height + ' body text must be heading minus 3px')
+  }
+  if (!/\.dshmp-panel \.dshmp-title,\.dshmp-panel \.dshmp-sect-label\{font-size:var\(--dshmp-h\)\}/.test(css)) {
+    failures.push(width + 'x' + height + ' headings must use the heading size')
+  }
+  if (!/\.dshmp-panel \.dshmp-msg,[^{]*\{font-size:calc\(var\(--dshmp-h\) - 4px\)\}/.test(css)) {
+    failures.push(width + 'x' + height + ' hints must be heading minus 4px')
+  }
+  // The bindings must come last, or the per-element sizes would win.
+  const scaleRule = css.indexOf('--dshmp-h:')
+  const lastPxSize = css.lastIndexOf('font-size:1')
+  if (scaleRule < lastPxSize) {
+    failures.push(width + 'x' + height + ' the type scale must be declared after the px sizes')
+  }
+  // Repeat-one is pulse only: no ripple, no travelling light.
+    if (!/@keyframes dshmp-icon-pulse/.test(css)) {
+      failures.push(width + 'x' + height + ' repeat pulse keyframes missing')
+    }
+    if (!/\.dshmp-mode-repeat\.dshmp-selected \.dshmp-mode>svg\{[^}]*animation:dshmp-icon-pulse/.test(css)) {
+      failures.push(width + 'x' + height + ' the selected repeat dot must pulse')
+    }
+    if (/dshmp-march|dshmp-ripple/.test(css) || /dshmp-march|dshmp-ripple/.test(String(JSON.stringify(tree)))) {
+      failures.push(width + 'x' + height + ' repeat motion must be the pulse only')
     }
     if (!/@keyframes dshmp-flow-x/.test(css)) {
       failures.push(width + 'x' + height + ' shuffle flow keyframes missing')
@@ -271,25 +303,45 @@ function checkSize(width, height) {
     if (!/\.dshmp-mode-shuffle\.dshmp-selected \.dshmp-mode>svg\{[^}]*mask-image:linear-gradient/.test(css)) {
       failures.push(width + 'x' + height + ' shuffle icon must stream left to right')
     }
+    // Repeat-one is drawn as two tracks with arrowheads plus a bold "1"; the old
+    // circular arrow read as a refresh symbol. Guard the shape so it stays legible.
+    const repeatGlyph = findNode(
+      tree,
+      (node) => node.type === 'path' && String(node.props.d || '').indexOf('M11 10h1v4') === 0,
+    )
+    if (!repeatGlyph) failures.push(width + 'x' + height + ' repeat-one glyph (the bold 1) missing')
+    else if (repeatGlyph.props.strokeWidth < 2) {
+      failures.push(width + 'x' + height + ' the repeat "1" must stay bolder than the tracks')
+    }
+    const repeatSvg = findNode(
+      tree,
+      (node) => node.type === 'svg' && (node.children || []).some((child) => child && child.props && child.props.key === 'trackUp'),
+    )
+    if (!repeatSvg) failures.push(width + 'x' + height + ' repeat tracks missing')
+    else if ((repeatSvg.children || []).length !== 5) {
+      failures.push(width + 'x' + height + ' repeat icon should be exactly 5 strokes')
+    }
     const repeatDot = findNode(
       tree,
       (node) => node.props && String(node.props.className).indexOf('dshmp-mode-repeat') !== -1,
     )
-    if (repeatDot && findNode(repeatDot, (node) => node.props && node.props.className === 'dshmp-ripple')) {
-      failures.push(width + 'x' + height + ' ripple may only run on the selected dot')
-    }
+    // Nothing but the pulse: no extra glyph layer was left behind.
+    const strayLayers = findNode(
+      tree,
+      (node) => node.props && /dshmp-(march|ripple)/.test(String(node.props.className || '')),
+    )
+    if (strayLayers) failures.push(width + 'x' + height + ' repeat needs no extra motion layer')
   }
 
-  const gearRing = findNode(tree, (node) => node.props && node.props.className === 'dshmp-gear-ring')
-  if (!gearRing) failures.push(width + 'x' + height + ' gear border must be an svg circle')
-  else {
-    const gearCircle = findNode(gearRing, (node) => node.type === 'circle' && node.props.strokeWidth === 1)
-    if (!gearCircle || gearCircle.props.r !== 21 || gearCircle.props.strokeWidth !== 1) {
-      failures.push(width + 'x' + height + ' gear border must be a 1px svg circle')
-    }
-  }
 
-  const seek = findNode(tree, (node) => node.props && node.props.className === 'dshmp-seek')
+  // Percentage radii drift with the box: the three button families use fixed px
+  // radii that match their SVG frames, so fill and border stay the same shape.
+  for (const [cls, radius] of [['dshmp-btn-main', '15px'], ['dshmp-btn-side', '10px']]) {
+    const rule = new RegExp('^\\.' + cls + '\\{([^}]*)\\}', 'm').exec(css)
+    if (!rule || !new RegExp('border-radius:' + radius).test(rule[1])) {
+      failures.push(width + 'x' + height + ' ' + cls + ' needs border-radius ' + radius)
+    }
+  }  const seek = findNode(tree, (node) => node.props && node.props.className === 'dshmp-seek')
   if (!seek) failures.push(width + 'x' + height + ' seek bar missing')
   else if (typeof seek.props.onPointerDown !== 'function') failures.push(width + 'x' + height + ' seek bar not interactive')
   const volumeTrack = findNode(tree, (node) => node.props && node.props.className === 'dshmp-volume-track')
@@ -385,7 +437,7 @@ function checkSize(width, height) {
   if (bracesOpen !== bracesClose) {
     failures.push(width + 'x' + height + ' unbalanced CSS braces: ' + bracesOpen + ' vs ' + bracesClose)
   }
-  if (!/\.dshmp-mode\{[^}]*border-radius:50%/.test(css)) {
+  if (!/\.dshmp-mode\{[^}]*border-radius:11px/.test(css)) {
     failures.push(width + 'x' + height + ' mode dot style missing')
   }
   if (!/\.dshmp-vinyl\{[^}]*opacity:\.8/.test(css)) {
@@ -410,33 +462,91 @@ function checkSize(width, height) {
   const glass = /\.dshmp-glass\{([^}]*)\}/.exec(css)
   if (!glass) failures.push(width + 'x' + height + ' glass rule missing')
   else {
-    const tint = /rgba\(18,20,26,\.(\d+)\)/.exec(glass[1])
-    if (!tint) failures.push(width + 'x' + height + ' glass tint fallback missing')
-    else if (Number('0.' + tint[1]) > 0.06) failures.push(width + 'x' + height + ' glass tint too opaque: ' + tint[0])
+    // The bar and circle use the theme's raised-surface token, so the same rule
+    // reads correctly on a white page and on a black one.
+    if (!/background:color-mix\(in srgb,var\(--dsw-alias-bg-layer-1\) \d+%,transparent\)/.test(glass[1])) {
+      failures.push(width + 'x' + height + ' glass surface must come from the theme token')
+    }
     const blur = /blur\((\d+)px\)/.exec(glass[1])
     if (!blur) failures.push(width + 'x' + height + ' glass backdrop-filter missing')
     else if (Number(blur[1]) > 12) failures.push(width + 'x' + height + ' glass blur too strong: ' + blur[0])
   }
   // Small circles keep their glass on a dedicated layer clipped to a true circle,
   // otherwise backdrop-filter leaks a square edge outside the rounded box.
-  // Small circles: body and border are SVG circles, so nothing is painted from a
-  // CSS box and nothing samples the backdrop.
-  // Every button, including the gear and the two dots, shares one glass recipe:
-  // 55% grey over a 9px backdrop blur.
-  for (const name of ['dshmp-btn', 'dshmp-gear::before', 'dshmp-mode::before']) {
-    const rule = new RegExp('\\.' + name.replace('::', '::') + '\\{([^}]*)\\}').exec(css)
+  // The three button families share one flat translucent fill. No backdrop-filter:
+  // sampling the backdrop a few pixels outside a rounded box is what made the fill
+  // look like a rounded square inside a circular frame.
+  for (const name of ['dshmp-btn', 'dshmp-gear', 'dshmp-mode']) {
+    const rule = new RegExp('^\\.' + name + '\\{([^}]*)\\}', 'm').exec(css)
     if (!rule) {
-      failures.push(width + 'x' + height + ' glass layer missing on ' + name)
+      failures.push(width + 'x' + height + ' button surface missing on ' + name)
       continue
     }
-    if (!/backdrop-filter:blur\(9px\)/.test(rule[1])) {
-      failures.push(width + 'x' + height + ' ' + name + ' must use the shared 9px blur')
+    if (/backdrop-filter/.test(rule[1])) {
+      failures.push(width + 'x' + height + ' ' + name + ' must not sample the backdrop')
     }
-    if (!/background:rgba\(150,158,172,\.55\)/.test(rule[1])) {
-      failures.push(width + 'x' + height + ' ' + name + ' must use the shared grey fill')
+    if (!/border-radius:\d+px/.test(rule[1]) && !/dshmp-btn/.test(name)) {
+      failures.push(width + 'x' + height + ' ' + name + ' needs a fixed px radius')
+    }
+    if (!/background:color-mix\(in srgb,currentColor 18%,transparent\)/.test(rule[1])) {
+      failures.push(width + 'x' + height + ' ' + name + ' must use the shared currentColor fill')
     }
   }
-  if (!/\.dshmp-mode-wrap\{/.test(css)) failures.push(width + 'x' + height + ' dot wrapper missing')
+  // A fixed white (or fixed grey) hairline only works in one theme. Every panel
+  // control now derives its ring from the text colour, so it inverts with the theme.
+  for (const name of ['dshmp-iconbtn', 'dshmp-field', 'dshmp-inline-btn', 'dshmp-pill', 'dshmp-link-btn', 'dshmp-help-btn']) {
+    const rule = new RegExp('^\\.' + name + '\\{([^}]*)\\}', 'm').exec(css)
+    if (!rule) {
+      failures.push(width + 'x' + height + ' ' + name + ' rule missing')
+      continue
+    }
+    if (!/var\(--dshmp-ring\)/.test(rule[1])) {
+      failures.push(width + 'x' + height + ' ' + name + ' needs the theme-derived ring')
+    }
+  }
+  if (!/--dshmp-ring:color-mix\(in srgb,currentColor \d+%,transparent\)/.test(css)) {
+    failures.push(width + 'x' + height + ' the ring scale must be a currentColor mix')
+  }  // The seek and volume tracks need the same hairline, or they vanish on white.
+  const trackRule = /\.dshmp-seek,\.dshmp-volume-track\{([^}]*)\}/.exec(css)
+  if (!trackRule) failures.push(width + 'x' + height + ' slider track rule missing')
+  else if (!/border:1px solid var\(--dshmp-ring\)/.test(trackRule[1])) {
+    failures.push(width + 'x' + height + ' slider tracks need the dark grey hairline')
+  }  // Volume separates "now" from "headroom" by tone: solid ivory fill on a dark well.
+  const volumeRule = /^\.dshmp-volume-track\{([^}]*)\}/m.exec(css)
+  if (!volumeRule || !/background:var\(--dshmp-mix-16\)/.test(volumeRule[1])) {
+    failures.push(width + 'x' + height + ' volume track must use the dark well')
+  }
+  const volumeFillRule = /\.dshmp-volume-track \.dshmp-volume-fill\{([^}]*)\}/.exec(css)
+  if (!volumeFillRule || !/background:var\(--dsw-alias-label-primary\)/.test(volumeFillRule[1])) {
+    failures.push(width + 'x' + height + ' volume fill must be solid ivory')
+  }
+  const volumeNode = findNode(tree, (node) => node.props && node.props.className === 'dshmp-volume-track')
+  if (!volumeNode) failures.push(width + 'x' + height + ' volume track missing')
+  else if (
+    !findNode(
+      volumeNode,
+      (node) => node.props && String(node.props.className).indexOf('dshmp-volume-fill') !== -1,
+    )
+  ) {
+    failures.push(width + 'x' + height + ' volume fill is not marked apart from the seek fill')
+  }  // Gear and play share one recipe: same fill, same ring, and the same theme
+  // foreground (a hard-coded ivory vanished on a light surface).
+  const gearRule = /^\.dshmp-gear\{([^}]*)\}/m.exec(css)
+  if (!gearRule || !/color:var\(--dsw-alias-label-primary\)/.test(gearRule[1])) {
+    failures.push(width + 'x' + height + ' gear must use the theme foreground')
+  }
+  const modeRule = /^\.dshmp-mode\{([^}]*)\}/m.exec(css)
+  if (!modeRule || !/color:var\(--dsw-alias-label-primary\)/.test(modeRule[1])) {
+    failures.push(width + 'x' + height + ' mode dots must use the theme foreground')
+  }
+  // The body of both small circles is painted on the element itself now, so no
+  // pseudo-element box can leak a rounded-rect edge from its backdrop filter.
+  for (const name of ['dshmp-gear::before', 'dshmp-mode::before']) {
+    const rule = new RegExp('^\\.' + name + '\\{([^}]*)\\}', 'm').exec(css)
+    if (rule && !/^$/.test(String(rule[1]).trim())) {
+      failures.push(width + 'x' + height + ' ' + name + ' must not paint a body any more')
+    }
+  }  if (!/\.dshmp-mode-wrap\{/.test(css)) failures.push(width + 'x' + height + ' dot wrapper missing')
   const panelRule = /\.dshmp-panel\{([^}]*)\}/.exec(css)
   if (!panelRule || !/backdrop-filter:blur/.test(panelRule[1])) {
     failures.push(width + 'x' + height + ' panel backdrop-filter missing')
@@ -452,7 +562,8 @@ function checkSize(width, height) {
   if (!gear) failures.push(width + 'x' + height + ' gear anchor missing')
 
   const inputs = countByTag(tree, 'input')
-  if (inputs !== 2) failures.push(width + 'x' + height + ' input count ' + inputs + ' expected 2')
+  // volume percent + draft playlist row + search
+  if (inputs !== 3) failures.push(width + 'x' + height + ' input count ' + inputs + ' expected 3')
 
   const audio = findNode(tree, (node) => node.type === 'audio')
   if (!audio) failures.push(width + 'x' + height + ' audio element missing')
@@ -518,6 +629,18 @@ function checkInteractions(width, height) {
     return
   }
 
+  // Dragging straight up must stop at the reserved title strip, not at the edge.
+  stage.props.onPointerDown(pointerEvent(200, 400))
+  stage.props.onPointerMove(pointerEvent(200, -600))
+  tree = renderTree(runtime, component)
+  stage = stageOf(tree)
+  stage.props.onPointerUp(pointerEvent(200, -600))
+  tree = renderTree(runtime, component)
+  stage = stageOf(tree)
+  const upMatch = /^translate3d\((-?[\d.]+)px,(-?[\d.]+)px,0\)$/.exec(stage.props.style.transform)
+  if (upMatch && Number(upMatch[2]) < 116) {
+    failures.push(width + 'x' + height + ' upward drag crossed the title strip: ' + upMatch[2])
+  }
   // A click without movement expands the circle into the bar.
   const startTransform = stage.props.style.transform
   stage.props.onPointerDown(pointerEvent(200, 300))
@@ -584,8 +707,11 @@ function checkInteractions(width, height) {
   if (movedX + barWidth > width - 13 || movedY + diameter > height - 13) {
     failures.push(width + 'x' + height + ' drag escaped viewport: ' + movedX + ',' + movedY)
   }
-  if (movedX < 14 || movedY < 14) {
+  if (movedX < 14) {
     failures.push(width + 'x' + height + ' drag negative position: ' + movedX + ',' + movedY)
+  }
+  if (movedY < 116) {
+    failures.push(width + 'x' + height + ' drag entered the title strip: ' + movedY)
   }
 
   // Clicking the bar background collapses it back to the circle.
@@ -598,16 +724,587 @@ function checkInteractions(width, height) {
   }
 }
 
-checkSize(1440, 900)
-checkSize(1024, 700)
-checkSize(390, 780) // narrow / phone-ish
-checkSize(320, 480) // smallest sane window
-checkInteractions(1440, 900)
-checkInteractions(360, 720)
+// ------------------------------------------------------------ volume control
+function checkVolume() {
+  const runtime = createRuntime(1440, 900)
+  if (!runtime) return
+  const registered = []
+  runtime.plugin.apply({
+    get: () => undefined,
+    slots: {
+      inject(key, callback) {
+        callback()
+        return () => {}
+      },
+      register(options, component) {
+        registered.push(component)
+        return () => {}
+      },
+    },
+  })
+  const component = registered[0]
+  let tree = renderTree(runtime, component)
+  const ok = (condition, message) => {
+    if (!condition) failures.push('volume: ' + message)
+  }
+  const valueOf = () => {
+    const node = findNode(tree, (item) => item.props && item.props.className === 'dshmp-volinput')
+    return node ? Number(node.props.value) : NaN
+  }
+  const typeInto = (text) => {
+    const node = findNode(tree, (item) => item.props && item.props.className === 'dshmp-volinput')
+    node.props.onChange({ target: { value: text } })
+    tree = renderTree(runtime, component)
+  }
+  const spinNodes = () =>
+    findAll(tree, (node) => node.props && String(node.props.className).indexOf('dshmp-spin-btn') === 0)
+  const clickSpin = (index) => {
+    spinNodes()[index].props.onClick({ stopPropagation() {}, preventDefault() {} })
+    tree = renderTree(runtime, component)
+  }
 
-if (failures.length) {
-  console.error('FAIL')
-  failures.forEach((line) => console.error(' - ' + line))
-  process.exit(1)
+  // Both slider rows share one grid, so the seek and volume tracks line up.
+  const rows = findAll(tree, (node) => node.props && String(node.props.className).indexOf('dshmp-slider-row') === 0)
+  ok(rows.length === 2, 'seek and volume must share the slider grid, got ' + rows.length)
+  const styleNode = findNode(tree, (node) => node.type === 'style')
+  const css = styleNode && styleNode.children ? String(styleNode.children.join('')) : ''
+  ok(
+    /\.dshmp-slider-row\{[^}]*grid-template-columns:34px minmax\(0,1fr\) 72px/.test(css),
+    'the shared grid template is missing',
+  )
+
+  // The settings panel is a fixed grey-black surface now, and its icons are plain
+  // white at full opacity (the red warning triangle stays red on purpose).
+  const panelRule = /^\.dshmp-panel\{([^}]*)\}/m.exec(css)
+  ok(!!panelRule, 'panel rule missing')
+  if (panelRule) {
+    ok(
+      /background:color-mix\(in srgb,var\(--dsw-alias-bg-overlay\) 58%,transparent\)/.test(panelRule[1]),
+      'the panel surface must come from the theme overlay token',
+    )
+    ok(/color:var\(--dsw-alias-label-primary\)/.test(panelRule[1]), 'the panel must set one foreground colour')
+  }
+  ok(
+    /\.dshmp-panel svg[^{]*\{[^}]*color:inherit;opacity:1/.test(css),
+    'panel icons must inherit the text colour at full opacity',
+  )
+  const spinRule = /^\.dshmp-spin-btn\{([^}]*)\}/m.exec(css)
+  ok(!!spinRule, 'stepper button rule missing')
+  if (spinRule) {
+    const width = /width:(\d+)px/.exec(spinRule[1])
+    const height = /height:(\d+)px/.exec(spinRule[1])
+    ok(width && Number(width[1]) >= 16, 'the stepper must be at least 16px wide, got ' + (width && width[1]))
+    ok(height && Number(height[1]) >= 12, 'the stepper must be at least 12px tall, got ' + (height && height[1]))
+  }
+
+  // The trailing number is an editable percent field, clamped to 0..100.
+  const input = findNode(tree, (node) => node.props && node.props.className === 'dshmp-volinput')
+  ok(!!input, 'the volume value must be an input')
+  if (input) {
+    ok(input.props.type === 'number', 'the volume value must be a number input')
+    ok(input.props.min === 0 && input.props.max === 100, 'the volume value must allow 0..100')
+    ok(Number(input.props.value) === 80, 'the default volume should read 80, got ' + input.props.value)
+  }
+  typeInto('150')
+  ok(valueOf() === 100, 'typing 150 must clamp to 100, got ' + valueOf())
+  typeInto('-30')
+  ok(valueOf() === 0, 'typing -30 must clamp to 0, got ' + valueOf())
+  typeInto('42')
+  ok(valueOf() === 42, 'typing 42 must land on 42, got ' + valueOf())
+  typeInto('abc')
+  ok(valueOf() === 42, 'garbage input must be ignored, got ' + valueOf())
+
+  // Two triangles step by exactly one point each, clamped at both ends.
+  ok(spinNodes().length === 2, 'the stepper needs exactly two triangles, got ' + spinNodes().length)
+  clickSpin(0)
+  ok(valueOf() === 43, 'the up triangle must add 1, got ' + valueOf())
+  clickSpin(1)
+  ok(valueOf() === 42, 'the down triangle must subtract 1, got ' + valueOf())
+  typeInto('100')
+  clickSpin(0)
+  ok(valueOf() === 100, 'the up triangle must not pass 100, got ' + valueOf())
+  typeInto('0')
+  clickSpin(1)
+  ok(valueOf() === 0, 'the down triangle must not pass 0, got ' + valueOf())
 }
-console.log('smoke test OK: module loads, slot entry registered, tree renders at 4 viewport sizes')
+
+// ------------------------------------------------------ multi-link playlist
+function findAll(tree, predicate) {
+  const found = []
+  walk(tree, (node) => {
+    if (predicate(node)) found.push(node)
+  })
+  return found
+}
+
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+function reply(body) {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  }
+}
+
+function makeFetchStub() {
+  const posts = []
+  const playlistCalls = []
+  const fetchStub = async (url, options) => {
+    const target = String(url)
+    const method = (options && options.method) || 'GET'
+    const parsed = new URL(target, 'http://127.0.0.1')
+    if (target.indexOf('/api/settings') !== -1) {
+      if (method === 'POST') posts.push(JSON.parse(String((options && options.body) || '{}')))
+      return reply({ ok: true, version: '1.102.0', settings: {} })
+    }
+    if (target.indexOf('/api/playlist') !== -1) {
+      const link = parsed.searchParams.get('link') || ''
+      const page = Number(parsed.searchParams.get('page') || 1)
+      playlistCalls.push({ link, page })
+      const empty = link.indexOf('empty') !== -1
+      return reply({
+        ok: true,
+        title: 'T:' + link,
+        items: empty ? [] : [{ bvid: 'bv-' + link, title: link, duration: 12 }],
+        hasMore: false,
+      })
+    }
+    return reply({ ok: true, items: [] })
+  }
+  return { fetchStub, posts, playlistCalls }
+}
+
+async function checkPlaylists() {
+  const { fetchStub, posts, playlistCalls } = makeFetchStub()
+  const runtime = createRuntime(1440, 900, { fetch: fetchStub })
+  if (!runtime) return
+  const registered = []
+  runtime.plugin.apply({
+    get: () => undefined,
+    slots: {
+      inject(key, callback) {
+        callback()
+        return () => {}
+      },
+      register(options, component) {
+        registered.push(component)
+        return () => {}
+      },
+    },
+  })
+  const component = registered[0]
+  const state = { tree: null }
+  const render = async () => {
+    state.tree = renderTree(runtime, component)
+    await flush()
+    state.tree = renderTree(runtime, component)
+    return state.tree
+  }
+  const ok = (condition, message) => {
+    if (!condition) failures.push('playlists: ' + message)
+  }
+
+  await render()
+  await flush()
+  state.tree = renderTree(runtime, component)
+
+  const rowsNode = () => findNode(state.tree, (node) => node.props && node.props.className === 'dshmp-rows')
+  const rowInputs = () => findAll(rowsNode() || state.tree, (node) => node.type === 'input')
+  const committed = () => rowInputs().filter((node) => node.props['data-dshmp-draft'] !== '1')
+  const draftInput = () => rowInputs().find((node) => node.props['data-dshmp-draft'] === '1')
+  const draftForm = () =>
+    findNode(state.tree, (node) => node.props && String(node.props.className).indexOf('dshmp-plrow-draft') !== -1)
+  const toggles = () =>
+    findAll(rowsNode() || state.tree, (node) => node.type === 'button' && String(node.props.className).indexOf('dshmp-link-btn') !== -1)
+  const connected = () => toggles().filter((node) => node.props['aria-pressed'] === 'true')
+  const glyphPaths = (button) => {
+    const svgNode = (button.children || []).find((child) => child && child.type === 'svg')
+    return svgNode ? (svgNode.children || []).filter((child) => child && child.type === 'path').length : -1
+  }
+  const emptyRowCount = () => rowInputs().filter((node) => String(node.props.value) === '').length
+  const listTracks = () =>
+    findAll(
+      state.tree,
+      (node) => node.type === 'button' && /^dshmp-track( |$)/.test(String((node.props && node.props.className) || '')),
+    )
+
+  // A fresh profile seeds exactly one row from the fallback link, plus the draft.
+  ok(rowInputs().length === 2, 'a fresh panel should show seed row + draft, got ' + rowInputs().length)
+  ok(draftInput() !== undefined, 'the trailing draft input is missing on first render')
+
+  const importLink = async (link) => {
+    draftInput().props.onChange({ target: { value: link } })
+    state.tree = await render()
+    draftForm().props.onSubmit({ preventDefault() {} })
+    await render()
+    await flush()
+    state.tree = renderTree(runtime, component)
+  }
+
+  // Rows only accept the public favourite-folder URL shape, so the fixtures use it.
+  const linkFor = (id) => 'https://www.bilibili.com/medialist/detail/' + id
+  for (let index = 1; index <= 10; index += 1) await importLink(linkFor('ml' + index))
+
+  ok(rowInputs().length === 12, 'after ten imports expected 12 inputs (11 rows + draft), got ' + rowInputs().length)
+  ok(emptyRowCount() === 1, 'exactly one empty input must remain, got ' + emptyRowCount())
+  const lastInput = rowInputs()[rowInputs().length - 1]
+  ok(lastInput && lastInput.props['data-dshmp-draft'] === '1', 'the empty input must be the trailing draft')
+  ok(
+    String(lastInput.props.value) === '' && committed().every((node) => String(node.props.value) !== ''),
+    'committed rows must all hold a link',
+  )
+
+  // The row button labels the state: the connected row reads "播放中", every other
+  // row invites a click with "点击播放"; the trailing draft keeps "载入".
+  const rowButtons = () =>
+    findAll(rowsNode() || state.tree, (node) => node.type === 'button' && node.props['data-row-action'])
+  const labelOf = (node) => String((node.children || []).join(''))
+  ok(rowButtons().length === committed().length, 'every committed row needs one action button')
+  ok(
+    rowButtons().filter((node) => node.props['data-row-action'] === 'playing').length === 1,
+    'exactly one row may read as playing',
+  )
+  ok(
+    rowButtons().every((node) =>
+      node.props['data-row-action'] === 'playing' ? labelOf(node) === '播放中' : labelOf(node) === '点击播放',
+    ),
+    'row labels must follow the connection state: ' + JSON.stringify(rowButtons().map(labelOf)),
+  )
+  // The playing row is a state, not an action: the button is disabled and shows no
+  // hover affordance, while every other row stays clickable.
+  ok(
+    rowButtons()
+      .filter((node) => node.props['data-row-action'] === 'playing')
+      .every((node) => node.props.disabled === true && node.props['aria-disabled'] === 'true'),
+    'the 播放中 button must be disabled',
+  )
+  ok(
+    rowButtons()
+      .filter((node) => node.props['data-row-action'] !== 'playing')
+      .every((node) => !node.props.disabled && node.props['aria-disabled'] === 'false'),
+    'the 点击播放 buttons must stay enabled',
+  )
+  // The draft row has no button at all: Enter submits it, and its glyph is the
+  // link-with-a-plus mark that says "add another link".
+  const draftButtons = findAll(draftForm() || state.tree, (node) => node.type === 'button')
+  ok(draftButtons.length === 0, 'the draft row must not carry a button, got ' + draftButtons.length)
+  ok(
+    draftInput().props.placeholder === committed()[0].props.placeholder,
+    'the draft row uses the same placeholder as a normal row',
+  )
+  const addIcon = findNode(
+    draftForm() || state.tree,
+    (node) => node.props && String(node.props.className).indexOf('dshmp-link-add') !== -1,
+  )
+  ok(addIcon.props.title === undefined, 'the add-link icon must not carry an Enter hint')
+  ok(!!addIcon, 'the draft row must show the add-link icon')
+  if (addIcon) {
+    const svgNode = findNode(addIcon, (node) => node.type === 'svg')
+    ok(!!svgNode, 'the add-link icon must be an svg')
+    const chain = svgNode && findNode(svgNode, (node) => node.type === 'g')
+    ok(!!chain, 'the add-link icon must keep the chain group')
+    const plusPaths = svgNode ? (svgNode.children || []).filter((child) => child && child.type === 'path') : []
+    ok(plusPaths.length === 2, 'the plus needs two strokes, got ' + plusPaths.length)
+  }
+
+  // Exactly one row is connected and it draws the closed-chain glyph. A freshly
+  // imported row must NOT take the connection: the seed row keeps it.
+  ok(connected().length === 1, 'exactly one row may be connected, got ' + connected().length)
+  ok(toggles().indexOf(connected()[0]) === 0, 'the seed row must stay connected after ten imports')
+  ok(connected()[0].props['data-link-icon'] === 'link', 'the connected row must draw the chain glyph')
+  ok(
+    connected()[0].props.disabled === true && connected()[0].props['aria-disabled'] === 'true',
+    'the connected row chain button must be disabled',
+  )
+
+  ok(glyphPaths(connected()[0]) === 2, 'chain glyph should be two paths, got ' + glyphPaths(connected()[0]))
+  const disconnected = toggles().filter((node) => node.props['aria-pressed'] !== 'true')
+  ok(disconnected.length === toggles().length - 1, 'every imported row stays disconnected, got ' + disconnected.length)
+  ok(disconnected.every((node) => node.props['data-link-icon'] === 'unlink'), 'every disconnected row must draw the broken glyph')
+  ok(disconnected.every((node) => glyphPaths(node) === 3), 'broken glyph should be three paths')
+  ok(
+    disconnected.every((node) => !node.props.disabled && node.props['aria-disabled'] === 'false'),
+    'every disconnected chain button must stay clickable',
+  )
+  ok(
+    rowButtons().filter((node) => node.props['data-row-action'] === 'playing').length === 1 &&
+      labelOf(rowButtons()[0]) === '播放中' &&
+      rowButtons()
+        .slice(1)
+        .every((node) => labelOf(node) === '点击播放'),
+    'only the connected row may read 播放中',
+  )
+
+  // Submitting the connected row must be inert too (its button is disabled, but
+  // pressing Enter in the input still submits that form).
+  const rowForms = () =>
+    findAll(state.tree, (node) => node.props && /^dshmp-plrow( |$)/.test(String(node.props.className)))
+  const callsBeforeSubmit = playlistCalls.length
+  rowForms()[0].props.onSubmit({ preventDefault() {} })
+  state.tree = await render()
+  ok(playlistCalls.length === callsBeforeSubmit, 'submitting the connected row must not reload')
+  ok(listTracks().length === 1, 'the connected row keeps its tracks')
+
+  // Deleting an idle middle row keeps the trailing draft and the connection.
+  const loadedBefore = playlistCalls.length
+  const middleIndex = Math.floor(committed().length / 2)
+  committed()[middleIndex].props.onChange({ target: { value: '' } })
+  state.tree = await render()
+  ok(rowInputs().length === 11, 'delete-middle: expected 11 inputs, got ' + rowInputs().length)
+  ok(emptyRowCount() === 1, 'delete-middle: exactly one empty input expected')
+  ok(rowInputs()[rowInputs().length - 1].props['data-dshmp-draft'] === '1', 'delete-middle: draft must stay last')
+  ok(playlistCalls.length === loadedBefore, 'delete-middle: dropping an idle row must not reload')
+
+  // The last committed row is idle too: deleting it must not move the connection.
+  const rowsBefore = committed().length
+  committed()[rowsBefore - 1].props.onChange({ target: { value: '' } })
+  state.tree = await render()
+  ok(rowInputs().length === 10, 'delete-last: expected 10 inputs, got ' + rowInputs().length)
+  ok(committed().length === rowsBefore - 1, 'delete-last: one committed row removed')
+  ok(emptyRowCount() === 1, 'delete-last: exactly one empty input expected')
+  ok(rowInputs()[rowInputs().length - 1].props['data-dshmp-draft'] === '1', 'delete-last: draft must stay last')
+  ok(toggles().indexOf(connected()[0]) === 0, 'delete-last: the seed row keeps the connection')
+  ok(playlistCalls.length === loadedBefore, 'delete-last: dropping an idle row must not reload')
+
+  // Deleting the connected row hands the connection to the first survivor.
+  const beforeHandover = playlistCalls.length
+  committed()[0].props.onChange({ target: { value: '' } })
+  state.tree = await render()
+  await flush()
+  state.tree = renderTree(runtime, component)
+  ok(rowInputs().length === 9, 'delete-first: expected 9 inputs, got ' + rowInputs().length)
+  ok(emptyRowCount() === 1, 'delete-first: exactly one empty input expected')
+  ok(rowInputs()[rowInputs().length - 1].props['data-dshmp-draft'] === '1', 'delete-first: draft must stay last')
+  ok(connected().length === 1, 'delete-first: the connection must hand over, got ' + connected().length)
+  ok(playlistCalls.length > beforeHandover, 'delete-first: the surviving row should be loaded')
+  const handedOver = committed()[0].props.value
+  ok(playlistCalls[playlistCalls.length - 1].link === handedOver, 'delete-first: loaded the wrong playlist')
+  ok(listTracks().length === 1 && listTracks()[0].props.title === handedOver, 'the list must follow the connected row')
+
+  // A link that already exists is rejected: no new row, a toast, and the original
+  // row's border flashes red for three seconds before it fades out.
+  await importLink(linkFor('ml-dup-probe'))
+  const rowsBeforeDup = committed().length
+  const callsBeforeDup = playlistCalls.length
+  draftInput().props.onChange({ target: { value: linkFor('ml-dup-probe') } })
+  state.tree = await render()
+  draftForm().props.onSubmit({ preventDefault() {} })
+  state.tree = await render()
+  ok(rowInputs().length === rowsBeforeDup + 1, 'a duplicate import must not add a row')
+  ok(playlistCalls.length === callsBeforeDup, 'a duplicate import must not start playing')
+  const dupField = findNode(
+    state.tree,
+    (node) => node.props && String(node.props.className).indexOf('dshmp-field-dup') !== -1,
+  )
+  ok(!!dupField, 'the existing row must flash red')
+  const dupToast = findNode(state.tree, (node) => node.props && String(node.props.className).indexOf('dshmp-msg') === 0)
+  ok(
+    dupToast && String((dupToast.children || []).join('')) === '已有重复歌单',
+    'a duplicate import must say 已有重复歌单, saw ' + JSON.stringify(dupToast && (dupToast.children || []).join('')),
+  )
+  const styleNodeLocal = findNode(state.tree, (node) => node.type === 'style')
+  const cssLocal = styleNodeLocal && styleNodeLocal.children ? String(styleNodeLocal.children.join('')) : ''
+  if (!/\.dshmp-field\.dshmp-field-dup\{[^}]*box-shadow:inset 0 0 0 1px var\(--dsw-alias-state-warn-primary/.test(cssLocal)) {
+    failures.push('playlists: the duplicate border must use the warning token')
+  }
+  if (!/\.dshmp-field\.dshmp-field-dup\{[^}]*transition:box-shadow \.6s ease/.test(cssLocal)) {
+    failures.push('playlists: the duplicate border must fade out')
+  }
+  // Yellow means "warning", red means "error": keep them apart in the CSS.
+  if (!/\.dshmp-link-btn\.dshmp-link-warn\{[^}]*var\(--dsw-alias-state-warn-primary/.test(cssLocal)) {
+    failures.push('playlists: the empty state icon must be the warning colour')
+  }
+  if (!/\.dshmp-inline-btn\.dshmp-inline-btn-warn\{[^}]*var\(--dsw-alias-state-warn-primary/.test(cssLocal)) {
+    failures.push('playlists: the empty state button must be the warning colour')
+  }
+  if (!/\.dshmp-msg\.dshmp-warn\{[^}]*var\(--dsw-alias-state-warn-primary/.test(cssLocal)) {
+    failures.push('playlists: the duplicate toast must be the warning colour')
+  }
+  ok(
+    dupToast && String(dupToast.props.className).indexOf('dshmp-warn') !== -1,
+    'the duplicate toast must carry the warn class',
+  )
+  await sleep(3100)
+  state.tree = await render()
+  const dupFieldAfter = findNode(
+    state.tree,
+    (node) => node.props && String(node.props.className).indexOf('dshmp-field-dup') !== -1,
+  )
+
+  ok(!dupFieldAfter, 'the red border must clear after three seconds')
+  // A valid link whose playlist is empty: the row shows 空, disabled, in yellow —
+  // the same shape as the malformed state, a different colour.
+  await importLink(linkFor('ml-empty'))
+  const emptyIndex = committed().findIndex((node) => String(node.props.value) === linkFor('ml-empty'))
+  ok(emptyIndex >= 0, 'the empty fixture row must exist')
+  toggles()[emptyIndex].props.onClick()
+  await render()
+  await flush()
+  state.tree = renderTree(runtime, component)
+  // Switching to an empty playlist flips the row immediately: 播放中 becomes 空.
+  ok(
+    labelOf(rowButtons()[emptyIndex]) === '空',
+    'an empty playlist must read 空 as soon as it is connected, got ' + labelOf(rowButtons()[emptyIndex]),
+  )
+  ok(rowButtons()[emptyIndex].props.disabled === true, 'the 空 button is disabled from the start')
+  ok(
+    rowButtons()[emptyIndex].props['data-row-action'] === 'empty',
+    'the row must be marked empty right away',
+  )
+  ok(toggles()[emptyIndex].props['data-link-icon'] === 'empty', 'the icon switches on load')
+  ok(listTracks().length === 0, 'the empty playlist has no tracks')
+  // Pressing play on it still explains why nothing happens.
+  const playButton = findNode(
+    state.tree,
+    (node) => node.type === 'button' && String(node.props.className).indexOf('dshmp-btn-main') !== -1,
+  )
+  ok(!!playButton, 'the transport play button must exist')
+  playButton.props.onClick({ stopPropagation() {} })
+  state.tree = await render()
+  const emptyButtons = rowButtons()
+  ok(labelOf(emptyButtons[emptyIndex]) === '空', 'still 空 after a play attempt, got ' + labelOf(emptyButtons[emptyIndex]))
+  ok(emptyButtons[emptyIndex].props.disabled === true, 'the 空 button must be disabled')
+  ok(
+    emptyButtons[emptyIndex].props['data-row-action'] === 'empty',
+    'the empty row must be marked as such, got ' + emptyButtons[emptyIndex].props['data-row-action'],
+  )
+  ok(
+    toggles()[emptyIndex].props['data-link-icon'] === 'empty',
+    'the empty row icon must switch to the warning glyph',
+  )
+  const emptyToast = findNode(state.tree, (node) => node.props && String(node.props.className).indexOf('dshmp-msg') === 0)
+  ok(
+    emptyToast && String((emptyToast.children || []).join('')) === '歌单为空',
+    'the play attempt must say 歌单为空, saw ' + JSON.stringify(emptyToast && (emptyToast.children || []).join('')),
+  )
+  ok(String(emptyToast.props.className).indexOf('dshmp-warn') !== -1, 'the empty hint must be the warning colour')
+  // Adding yet another row must not steal the connection either.
+  const stillConnected = toggles().indexOf(connected()[0])
+  const callsBeforeAdd = playlistCalls.length
+  await importLink(linkFor('ml-extra'))
+  ok(toggles().indexOf(connected()[0]) === stillConnected, 'a new import must not move the connection')
+  ok(playlistCalls.length === callsBeforeAdd, 'a new import must not start playing by itself')
+  const hintNode = findNode(state.tree, (node) => node.props && String(node.props.className).indexOf('dshmp-msg') === 0)
+  ok(
+    hintNode && String((hintNode.children || []).join('')) === '添加成功',
+    'an import must tell the user to press play, saw ' + JSON.stringify(hintNode && (hintNode.children || []).join('')),
+  )
+  const orderIndex = (predicate) => {
+    let index = -1
+    let counter = 0
+    walk(state.tree, (node) => {
+      if (index < 0 && predicate(node)) index = counter
+      counter += 1
+    })
+    return index
+  }
+  const msgIndex = orderIndex((node) => node.props && String(node.props.className).indexOf('dshmp-msg') === 0)
+  const rowsIndex = orderIndex((node) => node.props && node.props.className === 'dshmp-rows')
+  ok(msgIndex >= 0 && rowsIndex >= 0 && msgIndex < rowsIndex, 'the status line must sit above the playlist rows')
+  // The connection may be sitting on the empty row by now, so count connections
+  // rather than the 播放中 label.
+  ok(connected().length === 1, 'still exactly one connected row after an import')
+  // A malformed link becomes an error row: red triangle glyph, 格式错误 label, both
+  // inert. Editing the text back to a valid URL restores the normal state.
+  const badIndex = 1
+  const callsBeforeBad = playlistCalls.length
+  committed()[badIndex].props.onChange({ target: { value: 'https://example.com/not-a-playlist' } })
+  state.tree = await render()
+  ok(toggles()[badIndex].props['data-link-icon'] === 'warn', 'a malformed link shows the warning glyph')
+  ok(toggles()[badIndex].props.disabled === true, 'the warning glyph must not be a button')
+  ok(labelOf(rowButtons()[badIndex]) === '格式错误', 'the row label must read 格式错误')
+  ok(
+    rowButtons()[badIndex].props.disabled === true && rowButtons()[badIndex].props['data-row-action'] === 'invalid',
+    'the invalid row button must be inert',
+  )
+  rowForms()[badIndex].props.onSubmit({ preventDefault() {} })
+  state.tree = await render()
+  ok(playlistCalls.length === callsBeforeBad, 'an invalid row must never load anything')
+  committed()[badIndex].props.onChange({ target: { value: linkFor('ml-fixed') } })
+  state.tree = await render()
+  ok(toggles()[badIndex].props['data-link-icon'] === 'unlink', 'fixing the link restores the chain glyph')
+  ok(labelOf(rowButtons()[badIndex]) === '点击播放', 'fixing the link restores the play label')
+  // Rapid switching: three clicks in the same tick, only the last one sticks.
+  const links = committed().map((node) => String(node.props.value))
+  const targets = [1, 2, 3].filter((index) => index < links.length)
+  const buttons = toggles()
+  buttons[targets[0]].props.onClick()
+  // Switching drops the previous playlist synchronously: nothing of the old row
+  // may stay in the list while the new one loads.
+  const rightAfterSwitch = renderTree(runtime, component)
+  const staleTracks = findAll(
+    rightAfterSwitch,
+    (node) => node.type === 'button' && /^dshmp-track( |$)/.test(String((node.props && node.props.className) || '')),
+  )
+  ok(staleTracks.length === 0, 'switching must clear the previous list immediately, saw ' + staleTracks.length)
+  targets.slice(1).forEach((index) => buttons[index].props.onClick())
+  await render()
+  await flush()
+  state.tree = renderTree(runtime, component)
+  ok(connected().length === 1, 'after rapid switching still exactly one row is connected, got ' + connected().length)
+  const wantedLink = links[targets[targets.length - 1]]
+  const connectedIndex = toggles().indexOf(connected()[0])
+  ok(
+    committed()[connectedIndex] && String(committed()[connectedIndex].props.value) === wantedLink,
+    'the last clicked row must own the connection',
+  )
+  ok(connected()[0].props['data-link-icon'] === 'link', 'the winning row must draw the chain glyph')
+  ok(
+    toggles()
+      .filter((node) => node.props['aria-pressed'] !== 'true')
+      .every((node) => node.props['data-link-icon'] === 'unlink'),
+    'the losers must draw the broken glyph',
+  )
+  ok(playlistCalls[playlistCalls.length - 1].link === wantedLink, 'the last load must be the winning row')
+  const playingLabels = rowButtons().filter((node) => node.props['data-row-action'] === 'playing')
+  ok(playingLabels.length === 1 && labelOf(playingLabels[0]) === '播放中', 'exactly one row may read 播放中 after switching')
+  ok(
+    playingLabels[0].props.disabled === true,
+    'the winning row keeps its disabled 播放中 button',
+  )
+  ok(
+    rowButtons()
+      .filter((node) => node.props['data-row-action'] !== 'playing')
+      .every((node) => labelOf(node) === '点击播放'),
+    'the other rows must invite a click',
+  )
+  ok(
+    listTracks().length === 1 && listTracks()[0].props.title === wantedLink,
+    'the visible list must match the connected row, got ' + JSON.stringify(listTracks().map((node) => node.props.title)),
+  )
+
+  // The row list and the connection survive a debounce round-trip to the host.
+  await sleep(450)
+  const persisted = posts.filter((body) => Array.isArray(body.plists))
+  ok(persisted.length > 0, 'the row list must be persisted through /api/settings')
+  if (persisted.length) {
+    const last = persisted[persisted.length - 1]
+    ok(last.plists.length === committed().length, 'persisted rows ' + last.plists.length + ' expected ' + committed().length)
+    ok(typeof last.activeId === 'number' && last.activeId > 0, 'persisted activeId ' + last.activeId)
+  }
+}
+
+;(async () => {
+  checkSize(1440, 900)
+  checkSize(1024, 700)
+  checkSize(390, 780) // narrow / phone-ish
+  checkSize(320, 480) // smallest sane window
+  checkInteractions(1440, 900)
+  checkInteractions(360, 720)
+  checkVolume()
+  try {
+    await checkPlaylists()
+  } catch (error) {
+    failures.push('playlists flow threw: ' + error.message)
+  }
+
+  if (failures.length) {
+    console.error('FAIL')
+    failures.forEach((line) => console.error(' - ' + line))
+    process.exit(1)
+  }
+  console.log('smoke test OK: layout, interactions and multi-link playlist flow')
+})()

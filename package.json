@@ -1,6 +1,6 @@
 {
   "name": "dsh-music-player-bili",
-  "version": "0.1.62",
+  "version": "1.102.0",
   "private": false,
   "publishConfig": {
     "access": "public"
@@ -43,7 +43,8 @@
     "locale/*.json",
     "icon.svg",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "docs/THIRD_PARTY.md"
   ],
   "dsh": {
     "bundle": {
